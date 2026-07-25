@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Yape Live</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #111;
+            color: #eee;
+            padding: 20px;
+        }
+        .event {
+            background: #1e1e1e;
+            border-left: 4px solid #6200EE;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            animation: fadeIn 0.4s ease;
+        }
+        .monto { color: #4CAF50; font-size: 1.3em; font-weight: bold; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Yapeos en vivo</h1>
+    <div id="eventos"></div>
+
+    <script>
+        const container = document.getElementById("eventos");
+        const source = new EventSource("https://yape-backend-owoe.onrender.com/yapes/stream");
+
+        const sound = new Audio("yape.mp3");
+
+        source.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const div = document.createElement("div");
+            div.className = "event";
+            div.innerHTML = `<span class="monto">S/ ${data.monto}</span> — ${data.remitente} <br><small>Code: ${data.codigoSeguridad} | ${data.received_at}</small>`;
+            container.prepend(div);
+
+            sound.currentTime = 0;
+            sound.play().catch(err => console.log("Sound blocked until user interacts with page:", err));
+        };
+
+        source.onerror = function() {
+            console.log("Connection lost, retrying...");
+        };
+    </script>
+</body>
+</html>
