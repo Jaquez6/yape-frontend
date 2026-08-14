@@ -69,6 +69,31 @@
 
     #lock-screen { position: fixed; inset: 0; background: var(--bg-base); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 999; }
     #lock-input { background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; text-align: center; }
+
+    @media (max-width: 480px) {
+        header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 14px 16px;
+        }
+
+        .brand-group {
+            justify-content: space-between;
+        }
+
+        .summary-pill {
+            position: static;
+            transform: none;
+            justify-content: center;
+            width: 100%;
+        }
+
+        header > div:last-child {
+            justify-content: center;
+        }
+    }
+
   </style>
 </head>
 <body>
@@ -149,116 +174,121 @@
     }
 
     function iniciarApp() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const selectedDevice = urlParams.get("device");
+        const tipo = localStorage.getItem("yape_tipo");
+        const deviceAsignado = localStorage.getItem("yape_device");
 
-      if (selectedDevice !== null) {
-        renderFeedView(selectedDevice);
-      } else {
-        renderDashboardView();
-      }
+        if (tipo === "admin") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const selectedDevice = urlParams.get("device");
+            if (selectedDevice !== null) {
+            renderFeedView(selectedDevice);
+            } else {
+            renderDashboardView();
+            }
+        } else {
+            renderFeedView(deviceAsignado);
+        }
     }
 
     const tokenGuardado = localStorage.getItem("yape_token");
     if (tokenGuardado) {
-      document.getElementById("lock-screen").style.display = "none";
-      iniciarApp();
+        document.getElementById("lock-screen").style.display = "none";
+        iniciarApp();
     }
 
     async function renderDashboardView() {
-      document.getElementById("total-day-card").style.display = "none";
-      document.getElementById("live-indicator").style.display = "none";
+        document.getElementById("total-day-card").style.display = "none";
+        document.getElementById("live-indicator").style.display = "none";
 
-      const app = document.getElementById("app");
-      app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando lista de dispositivos...</p>`;
+        const app = document.getElementById("app");
+        app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando lista de dispositivos...</p>`;
 
-      const token = localStorage.getItem("yape_token");
+        const token = localStorage.getItem("yape_token");
 
-      try {
-        const res = await fetch(`${API_BASE}/devices`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const data = await res.json();
-        const devices = data.devices || [];
+        try {
+            const res = await fetch(`${API_BASE}/devices`, {
+            headers: { "Authorization": `Bearer ${token}` }
+            });
+            const data = await res.json();
+            const devices = data.devices || [];
 
-        let html = `
-          <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Seleccionar canal</p>
-          <div class="device-grid">
-            <div class="device-card" onclick="location.href='?device='">
-              <div>
-                <strong style="font-size:0.9rem; color:var(--text-primary);">Todos los dispositivos</strong>
-                <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Consolidado global en tiempo real</p>
-              </div>
-              <span class="btn btn-secondary">Ver Feed</span>
-            </div>
-        `;
+            let html = `
+            <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Seleccionar canal</p>
+            <div class="device-grid">
+                <div class="device-card" onclick="location.href='?device='">
+                <div>
+                    <strong style="font-size:0.9rem; color:var(--text-primary);">Todos los dispositivos</strong>
+                    <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Consolidado global en tiempo real</p>
+                </div>
+                <span class="btn btn-secondary">Ver Feed</span>
+                </div>
+            `;
 
-        devices.forEach(dev => {
-          html += `
-            <div class="device-card" onclick="location.href='?device=${encodeURIComponent(dev)}'">
-              <div>
-                <strong style="font-size:0.9rem; color:var(--text-primary);">${dev}</strong>
-              </div>
-              <span class="btn btn-secondary">Filtrar</span>
-            </div>
-          `;
-        });
+            devices.forEach(dev => {
+            html += `
+                <div class="device-card" onclick="location.href='?device=${encodeURIComponent(dev)}'">
+                <div>
+                    <strong style="font-size:0.9rem; color:var(--text-primary);">${dev}</strong>
+                </div>
+                <span class="btn btn-secondary">Filtrar</span>
+                </div>
+            `;
+            });
 
-        html += `</div>`;
-        app.innerHTML = html;
-      } catch (err) {
-        app.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error de conexión con la API.</p>`;
-      }
+            html += `</div>`;
+            app.innerHTML = html;
+        } catch (err) {
+            app.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error de conexión con la API.</p>`;
+        }
     }
 
     async function renderFeedView(device) {
-      const app = document.getElementById("app");
-      document.getElementById("view-title").innerText = device === "" ? "Feed Global" : device;
+        const app = document.getElementById("app");
+        const esAdmin = localStorage.getItem("yape_tipo") === "admin";
+        
+        document.getElementById("view-title").innerText = device === "" ? "Feed Global" : device;
+        document.getElementById("total-day-card").style.display = "flex";
+        document.getElementById("live-indicator").style.display = "flex";
 
-      document.getElementById("total-day-card").style.display = "flex";
-      document.getElementById("live-indicator").style.display = "flex";
+        app.innerHTML = `
+            ${esAdmin ? `<div class="nav-bar"><a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a></div>` : ""}
+            <div id="yape-list" class="yape-list"></div>
+        `;
 
-      app.innerHTML = `
-        <div class="nav-bar">
-          <a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a>
-        </div>
-        <div id="yape-list" class="yape-list"></div>
-      `;
+        let currentYapes = [];
+        const listContainer = document.getElementById("yape-list");
+        const token = localStorage.getItem("yape_token");
 
-      let currentYapes = [];
-      const listContainer = document.getElementById("yape-list");
-      const token = localStorage.getItem("yape_token");
+        try {
+            const fetchUrl = device ? `${API_BASE}/yapes?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes`;
+            const res = await fetch(fetchUrl, {
+            headers: { "Authorization": `Bearer ${token}` }
+            });
+            const history = await res.json();
 
-      try {
-        const fetchUrl = device ? `${API_BASE}/yapes?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes`;
-        const res = await fetch(fetchUrl, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const history = await res.json();
-
-        currentYapes = history;
-        history.forEach(item => listContainer.appendChild(createYapeCard(item)));
-        updateDayTotal(currentYapes);
-      } catch (err) {
-        console.error("Error al cargar historial:", err);
-      }
-
-      const streamUrl = device
-        ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
-        : `${API_BASE}/yapes/stream?token=${token}`;
-      const eventSource = new EventSource(streamUrl);
-
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        currentYapes.unshift(data);
-        listContainer.prepend(createYapeCard(data));
-        updateDayTotal(currentYapes);
-
-        if (soundEnabled) {
-          audio.currentTime = 0;
-          audio.play().catch(() => {});
+            currentYapes = history;
+            history.forEach(item => listContainer.appendChild(createYapeCard(item)));
+            updateDayTotal(currentYapes);
+        } catch (err) {
+            console.error("Error al cargar historial:", err);
         }
-      };
+
+        const streamUrl = device
+            ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
+            : `${API_BASE}/yapes/stream?token=${token}`;
+        const eventSource = new EventSource(streamUrl);
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            currentYapes.unshift(data);
+            listContainer.prepend(createYapeCard(data));
+            updateDayTotal(currentYapes);
+
+            if (soundEnabled) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+            }
+        };
     }
 
     function createYapeCard(data) {
