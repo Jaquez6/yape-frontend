@@ -3,102 +3,191 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yape Notifier - Dashboard</title>
+  <title>Yape Listener — Financial Dashboard</title>
   <style>
     :root {
-      --bg-color: #121826;
-      --card-bg: #1f293d;
-      --accent: #742384; /* Color Yape */
-      --accent-bright: #a238b6;
-      --text-main: #f3f4f6;
-      --text-sub: #9ca3af;
-      --green: #10b981;
+      --bg-base: #090d16;
+      --panel-bg: #111827;
+      --panel-border: #1f293d;
+      --text-primary: #f9fafb;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      --yape-purple: #8b5cf6;
+      --yape-purple-bright: #a855f7;
+      --yape-purple-soft: rgba(139, 92, 246, 0.15);
+      --status-green: #10b981;
+      --status-green-bg: rgba(16, 185, 129, 0.08);
+      --font-stack: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background-color: var(--bg-color); color: var(--text-main); padding: 20px; max-width: 600px; margin: 0 auto; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-stack); }
+    body { background-color: var(--bg-base); color: var(--text-primary); padding: 24px 16px; max-width: 680px; margin: 0 auto; min-height: 100vh; -webkit-font-smoothing: antialiased; }
 
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #374151; }
-    h1 { font-size: 1.4rem; color: var(--accent-bright); }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px; margin-bottom: 24px; position: relative; }
+    .brand-group { display: flex; align-items: center; gap: 10px; }
+    h1 { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.2px; text-transform: uppercase; }
 
-    .btn { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; font-size: 0.9rem; }
-    .btn:hover { background: var(--accent-bright); }
-    .btn-secondary { background: #374151; }
-    .btn-secondary:hover { background: #4b5563; }
+    .status-badge { display: none; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 500; color: var(--status-green); background: var(--status-green-bg); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.2); }
+    .status-dot { width: 6px; height: 6px; background-color: var(--status-green); border-radius: 50%; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); animation: statusPulse 2s infinite; }
 
-    /* Estilos del selector de dispositivos */
-    .device-grid { display: grid; gap: 12px; margin-top: 15px; }
-    .device-card { background: var(--card-bg); padding: 16px; border-radius: 12px; border: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.1s; }
-    .device-card:hover { transform: translateY(-2px); border-color: var(--accent-bright); }
+    @keyframes statusPulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
 
-    /* Estilos del feed de Yapeos */
-    .yape-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
-    .yape-card { background: var(--card-bg); padding: 16px; border-radius: 12px; border-left: 5px solid var(--accent-bright); animation: slideIn 0.3s ease-out; }
-    .yape-header { display: flex; justify-content: space-between; align-items: center; }
-    .monto { font-size: 1.5rem; font-weight: bold; color: var(--green); }
-    .remitente { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
-    .detalles { font-size: 0.85rem; color: var(--text-sub); margin-top: 8px; display: flex; justify-content: space-between; }
+    .summary-pill { position: absolute; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.03); padding: 4px 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); }
+    .summary-label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
+    .summary-val { font-size: 0.95rem; font-weight: 600; color: var(--status-green); font-variant-numeric: tabular-nums; }
 
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-10px); }
+    .btn { background: var(--yape-purple); color: white; border: none; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-weight: 500; text-decoration: none; font-size: 0.82rem; transition: background 0.15s ease; }
+    .btn:hover { background: var(--yape-purple-bright); }
+    .btn-secondary { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--panel-border); }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.09); }
+
+    .device-grid { display: grid; gap: 10px; margin-top: 14px; }
+    .device-card { background: var(--panel-bg); padding: 16px; border-radius: 10px; border: 1px solid var(--panel-border); border-left: 4px solid var(--yape-purple); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s ease; }
+    .device-card:hover { border-left-color: var(--yape-purple-bright); box-shadow: 0 4px 16px var(--yape-purple-soft); transform: translateY(-1px); }
+
+    .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .yape-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .yape-card { background: var(--panel-bg); padding: 16px; border-radius: 10px; border: 1px solid var(--panel-border); border-left: 4px solid var(--yape-purple); display: flex; flex-direction: column; gap: 10px; animation: fadeIn 0.25s ease-out; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+    .yape-card:hover { border-left-color: var(--yape-purple-bright); box-shadow: 0 4px 20px var(--yape-purple-soft); }
+
+    .yape-row-main { display: flex; justify-content: space-between; align-items: baseline; }
+    .remitente { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
+    .monto { font-size: 1.25rem; font-weight: 700; color: var(--status-green); font-variant-numeric: tabular-nums; }
+
+    .yape-row-sub { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-secondary); }
+    .meta-tag { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; color: var(--text-secondary); }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
+    #lock-screen { position: fixed; inset: 0; background: var(--bg-base); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 999; }
+    #lock-input { background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; text-align: center; }
   </style>
 </head>
 <body>
 
+  <div id="lock-screen">
+    <p style="color:var(--text-secondary); font-size:0.9rem;">Ingresa la clave</p>
+    <input id="lock-input" type="password" />
+    <button id="lock-btn" class="btn">Entrar</button>
+    <p id="lock-error" style="color:#f87171; font-size:0.8rem; display:none;">Clave incorrecta</p>
+  </div>
+
   <header>
-    <h1 id="view-title">Yape Listener</h1>
-    <button id="sound-btn" class="btn btn-secondary">🔊 Activar Sonido</button>
+    <div class="brand-group">
+      <h1 id="view-title">Yape Monitor</h1>
+      <div id="live-indicator" class="status-badge">
+        <span class="status-dot"></span> En Vivo
+      </div>
+    </div>
+
+    <div id="total-day-card" class="summary-pill">
+      <span class="summary-label">Hoy:</span>
+      <strong id="total-day-amount" class="summary-val">S/ 0.00</strong>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button id="sound-btn" class="btn btn-secondary">🔊 Sonido</button>
+      <button id="logout-btn" class="btn btn-secondary">Salir</button>
+    </div>
   </header>
 
-  <main id="app">
-    <!-- El contenido dinámico se inyectará aquí -->
-  </main>
+  <main id="app"></main>
 
   <script>
     const API_BASE = "https://yape-backend-owoe.onrender.com";
     let soundEnabled = false;
     const audio = new Audio("yape.mp3");
 
-    // Configuración de audio
     document.getElementById("sound-btn").addEventListener("click", () => {
       soundEnabled = !soundEnabled;
-      document.getElementById("sound-btn").innerText = soundEnabled ? "🔊 Sonido Activo" : "🔇 Activar Sonido";
+      document.getElementById("sound-btn").innerText = soundEnabled ? "🔊 Activo" : "🔇 Silencio";
       if (soundEnabled) audio.play().catch(() => {});
     });
 
-    // Detectar si hay ?device= en la URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const selectedDevice = urlParams.get("device");
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      localStorage.removeItem("yape_token");
+      location.reload();
+    });
 
-    if (selectedDevice !== null) {
-      renderFeedView(selectedDevice);
-    } else {
-      renderDashboardView();
+    document.getElementById("lock-btn").addEventListener("click", intentarEntrar);
+    document.getElementById("lock-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") intentarEntrar();
+    });
+
+    async function intentarEntrar() {
+        const clave = document.getElementById("lock-input").value;
+        try {
+            const res = await fetch(`${API_BASE}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: clave })
+            });
+            if (!res.ok) {
+            const errorData = await res.json();
+            document.getElementById("lock-error").innerText = errorData.detail || "Clave incorrecta";
+            document.getElementById("lock-error").style.display = "block";
+            return;
+            }
+            const data = await res.json();
+            localStorage.setItem("yape_token", data.token);
+            document.getElementById("lock-screen").style.display = "none";
+            iniciarApp();
+        } catch (err) {
+            document.getElementById("lock-error").innerText = "Error de conexión";
+            document.getElementById("lock-error").style.display = "block";
+        }
     }
 
-    // ---------------------------------------------------------
-    // VISTA 1: Selector de Dispositivos (Dashboard)
-    // ---------------------------------------------------------
+    function iniciarApp() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const selectedDevice = urlParams.get("device");
+
+      if (selectedDevice !== null) {
+        renderFeedView(selectedDevice);
+      } else {
+        renderDashboardView();
+      }
+    }
+
+    const tokenGuardado = localStorage.getItem("yape_token");
+    if (tokenGuardado) {
+      document.getElementById("lock-screen").style.display = "none";
+      iniciarApp();
+    }
+
     async function renderDashboardView() {
+      document.getElementById("total-day-card").style.display = "none";
+      document.getElementById("live-indicator").style.display = "none";
+
       const app = document.getElementById("app");
-      app.innerHTML = `<p>Cargando dispositivos...</p>`;
+      app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando lista de dispositivos...</p>`;
+
+      const token = localStorage.getItem("yape_token");
 
       try {
-        const res = await fetch(`${API_BASE}/devices`);
+        const res = await fetch(`${API_BASE}/devices`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         const data = await res.json();
         const devices = data.devices || [];
 
         let html = `
-          <p style="color: var(--text-sub);">Selecciona un dispositivo para ver sus notificaciones en tiempo real:</p>
+          <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Seleccionar canal</p>
           <div class="device-grid">
             <div class="device-card" onclick="location.href='?device='">
               <div>
-                <strong>🌐 Todos los dispositivos</strong>
-                <p style="font-size:0.8rem; color: var(--text-sub);">Ver feed global unificado</p>
+                <strong style="font-size:0.9rem; color:var(--text-primary);">Todos los dispositivos</strong>
+                <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Consolidado global en tiempo real</p>
               </div>
-              <span class="btn">Ver feed</span>
+              <span class="btn btn-secondary">Ver Feed</span>
             </div>
         `;
 
@@ -106,7 +195,7 @@
           html += `
             <div class="device-card" onclick="location.href='?device=${encodeURIComponent(dev)}'">
               <div>
-                <strong>📱 ${dev}</strong>
+                <strong style="font-size:0.9rem; color:var(--text-primary);">${dev}</strong>
               </div>
               <span class="btn btn-secondary">Filtrar</span>
             </div>
@@ -116,49 +205,52 @@
         html += `</div>`;
         app.innerHTML = html;
       } catch (err) {
-        app.innerHTML = `<p style="color:red;">Error al cargar dispositivos desde el backend.</p>`;
+        app.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error de conexión con la API.</p>`;
       }
     }
 
-    // ---------------------------------------------------------
-    // VISTA 2: Feed en Tiempo Real (SSE + Historial)
-    // ---------------------------------------------------------
     async function renderFeedView(device) {
       const app = document.getElementById("app");
-      const title = device === "" ? "Feed: Todos los dispositivos" : `Dispositivo: ${device}`;
-      document.getElementById("view-title").innerText = title;
+      document.getElementById("view-title").innerText = device === "" ? "Feed Global" : device;
+
+      document.getElementById("total-day-card").style.display = "flex";
+      document.getElementById("live-indicator").style.display = "flex";
 
       app.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <a href="index.html" class="btn btn-secondary">⬅️ Cambiar Dispositivo</a>
-          <span style="font-size:0.85rem; color:var(--green);">● En Vivo</span>
+        <div class="nav-bar">
+          <a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a>
         </div>
         <div id="yape-list" class="yape-list"></div>
       `;
 
+      let currentYapes = [];
       const listContainer = document.getElementById("yape-list");
+      const token = localStorage.getItem("yape_token");
 
-      // 1. Cargar historial reciente (últimos 100)
       try {
         const fetchUrl = device ? `${API_BASE}/yapes?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes`;
-        const res = await fetch(fetchUrl);
+        const res = await fetch(fetchUrl, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         const history = await res.json();
 
-        history.forEach(item => {
-          listContainer.appendChild(createYapeCard(item));
-        });
+        currentYapes = history;
+        history.forEach(item => listContainer.appendChild(createYapeCard(item)));
+        updateDayTotal(currentYapes);
       } catch (err) {
         console.error("Error al cargar historial:", err);
       }
 
-      // 2. Conectar a Server-Sent Events (SSE) para actualizaciones en vivo
-      const streamUrl = device ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes/stream`;
+      const streamUrl = device
+        ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
+        : `${API_BASE}/yapes/stream?token=${token}`;
       const eventSource = new EventSource(streamUrl);
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        const card = createYapeCard(data);
-        listContainer.prepend(card);
+        currentYapes.unshift(data);
+        listContainer.prepend(createYapeCard(data));
+        updateDayTotal(currentYapes);
 
         if (soundEnabled) {
           audio.currentTime = 0;
@@ -167,26 +259,58 @@
       };
     }
 
-    // Función auxiliar para construir la tarjeta HTML de cada yapeo
     function createYapeCard(data) {
       const card = document.createElement("div");
       card.className = "yape-card";
-      
-      const fecha = data.received_at ? new Date(data.received_at).toLocaleTimeString() : "Reciente";
-      const codigo = data.codigoSeguridad ? `Cód: ${data.codigoSeguridad}` : "Sin cód.";
-      const dev = data.deviceId ? ` | ${data.deviceId}` : "";
+
+      let fechaTexto = "Reciente";
+      if (data.received_at) {
+        const strIso = data.received_at.endsWith("Z") ? data.received_at : data.received_at + "Z";
+        const fechaObj = new Date(strIso);
+
+        fechaTexto = fechaObj.toLocaleString("es-PE", {
+          timeZone: "America/Lima",
+          day: "numeric",
+          month: "numeric",
+          year: "2-digit",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true
+        });
+      }
+
+      const codigo = data.codigoSeguridad ? `<span class="meta-tag">Cód: ${data.codigoSeguridad}</span>` : "";
+      const dev = data.deviceId ? `<span class="meta-tag">${data.deviceId}</span>` : "";
 
       card.innerHTML = `
-        <div class="yape-header">
+        <div class="yape-row-main">
           <span class="remitente">${data.remitente}</span>
           <span class="monto">S/ ${data.monto.toFixed(2)}</span>
         </div>
-        <div class="detalles">
-          <span>${codigo}${dev}</span>
-          <span>${fecha}</span>
+        <div class="yape-row-sub">
+          <div style="display:flex; gap:6px;">${dev}${codigo}</div>
+          <span>${fechaTexto}</span>
         </div>
       `;
       return card;
+    }
+
+    function updateDayTotal(yapesList) {
+      const totalContainer = document.getElementById("total-day-amount");
+      if (!totalContainer) return;
+
+      const hoyLima = new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+
+      const totalHoy = yapesList.reduce((acc, item) => {
+        if (!item.received_at) return acc;
+        const strIso = item.received_at.endsWith("Z") ? item.received_at : item.received_at + "Z";
+        const itemFechaLima = new Date(strIso).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+
+        return itemFechaLima === hoyLima ? acc + (Number(item.monto) || 0) : acc;
+      }, 0);
+
+      totalContainer.innerText = `S/ ${totalHoy.toFixed(2)}`;
     }
   </script>
 </body>
