@@ -1,54 +1,193 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Yape Live</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            background: #111;
-            color: #eee;
-            padding: 20px;
-        }
-        .event {
-            background: #1e1e1e;
-            border-left: 4px solid #6200EE;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            animation: fadeIn 0.4s ease;
-        }
-        .monto { color: #4CAF50; font-size: 1.3em; font-weight: bold; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yape Notifier - Dashboard</title>
+  <style>
+    :root {
+      --bg-color: #121826;
+      --card-bg: #1f293d;
+      --accent: #742384; /* Color Yape */
+      --accent-bright: #a238b6;
+      --text-main: #f3f4f6;
+      --text-sub: #9ca3af;
+      --green: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg-color); color: var(--text-main); padding: 20px; max-width: 600px; margin: 0 auto; }
+
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #374151; }
+    h1 { font-size: 1.4rem; color: var(--accent-bright); }
+
+    .btn { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; font-size: 0.9rem; }
+    .btn:hover { background: var(--accent-bright); }
+    .btn-secondary { background: #374151; }
+    .btn-secondary:hover { background: #4b5563; }
+
+    /* Estilos del selector de dispositivos */
+    .device-grid { display: grid; gap: 12px; margin-top: 15px; }
+    .device-card { background: var(--card-bg); padding: 16px; border-radius: 12px; border: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.1s; }
+    .device-card:hover { transform: translateY(-2px); border-color: var(--accent-bright); }
+
+    /* Estilos del feed de Yapeos */
+    .yape-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+    .yape-card { background: var(--card-bg); padding: 16px; border-radius: 12px; border-left: 5px solid var(--accent-bright); animation: slideIn 0.3s ease-out; }
+    .yape-header { display: flex; justify-content: space-between; align-items: center; }
+    .monto { font-size: 1.5rem; font-weight: bold; color: var(--green); }
+    .remitente { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
+    .detalles { font-size: 0.85rem; color: var(--text-sub); margin-top: 8px; display: flex; justify-content: space-between; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
 <body>
-    <h1>Yapeos en vivo</h1>
-    <div id="eventos"></div>
 
-    <script>
-        const container = document.getElementById("eventos");
-        const source = new EventSource("https://yape-backend-owoe.onrender.com/yapes/stream");
+  <header>
+    <h1 id="view-title">Yape Listener</h1>
+    <button id="sound-btn" class="btn btn-secondary">🔊 Activar Sonido</button>
+  </header>
 
-        const sound = new Audio("yape.mp3");
+  <main id="app">
+    <!-- El contenido dinámico se inyectará aquí -->
+  </main>
 
-        source.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-            const div = document.createElement("div");
-            div.className = "event";
-            div.innerHTML = `<span class="monto">S/ ${data.monto}</span> — ${data.remitente} <br><small>Code: ${data.codigoSeguridad} | ${data.received_at}</small>`;
-            container.prepend(div);
+  <script>
+    const API_BASE = "https://yape-backend-owoe.onrender.com";
+    let soundEnabled = false;
+    const audio = new Audio("yape.mp3");
 
-            sound.currentTime = 0;
-            sound.play().catch(err => console.log("Sound blocked until user interacts with page:", err));
-        };
+    // Configuración de audio
+    document.getElementById("sound-btn").addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      document.getElementById("sound-btn").innerText = soundEnabled ? "🔊 Sonido Activo" : "🔇 Activar Sonido";
+      if (soundEnabled) audio.play().catch(() => {});
+    });
 
-        source.onerror = function() {
-            console.log("Connection lost, retrying...");
-        };
-    </script>
+    // Detectar si hay ?device= en la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const selectedDevice = urlParams.get("device");
+
+    if (selectedDevice !== null) {
+      renderFeedView(selectedDevice);
+    } else {
+      renderDashboardView();
+    }
+
+    // ---------------------------------------------------------
+    // VISTA 1: Selector de Dispositivos (Dashboard)
+    // ---------------------------------------------------------
+    async function renderDashboardView() {
+      const app = document.getElementById("app");
+      app.innerHTML = `<p>Cargando dispositivos...</p>`;
+
+      try {
+        const res = await fetch(`${API_BASE}/devices`);
+        const data = await res.json();
+        const devices = data.devices || [];
+
+        let html = `
+          <p style="color: var(--text-sub);">Selecciona un dispositivo para ver sus notificaciones en tiempo real:</p>
+          <div class="device-grid">
+            <div class="device-card" onclick="location.href='?device='">
+              <div>
+                <strong>🌐 Todos los dispositivos</strong>
+                <p style="font-size:0.8rem; color: var(--text-sub);">Ver feed global unificado</p>
+              </div>
+              <span class="btn">Ver feed</span>
+            </div>
+        `;
+
+        devices.forEach(dev => {
+          html += `
+            <div class="device-card" onclick="location.href='?device=${encodeURIComponent(dev)}'">
+              <div>
+                <strong>📱 ${dev}</strong>
+              </div>
+              <span class="btn btn-secondary">Filtrar</span>
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+        app.innerHTML = html;
+      } catch (err) {
+        app.innerHTML = `<p style="color:red;">Error al cargar dispositivos desde el backend.</p>`;
+      }
+    }
+
+    // ---------------------------------------------------------
+    // VISTA 2: Feed en Tiempo Real (SSE + Historial)
+    // ---------------------------------------------------------
+    async function renderFeedView(device) {
+      const app = document.getElementById("app");
+      const title = device === "" ? "Feed: Todos los dispositivos" : `Dispositivo: ${device}`;
+      document.getElementById("view-title").innerText = title;
+
+      app.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <a href="index.html" class="btn btn-secondary">⬅️ Cambiar Dispositivo</a>
+          <span style="font-size:0.85rem; color:var(--green);">● En Vivo</span>
+        </div>
+        <div id="yape-list" class="yape-list"></div>
+      `;
+
+      const listContainer = document.getElementById("yape-list");
+
+      // 1. Cargar historial reciente (últimos 100)
+      try {
+        const fetchUrl = device ? `${API_BASE}/yapes?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes`;
+        const res = await fetch(fetchUrl);
+        const history = await res.json();
+
+        history.forEach(item => {
+          listContainer.appendChild(createYapeCard(item));
+        });
+      } catch (err) {
+        console.error("Error al cargar historial:", err);
+      }
+
+      // 2. Conectar a Server-Sent Events (SSE) para actualizaciones en vivo
+      const streamUrl = device ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}` : `${API_BASE}/yapes/stream`;
+      const eventSource = new EventSource(streamUrl);
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const card = createYapeCard(data);
+        listContainer.prepend(card);
+
+        if (soundEnabled) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        }
+      };
+    }
+
+    // Función auxiliar para construir la tarjeta HTML de cada yapeo
+    function createYapeCard(data) {
+      const card = document.createElement("div");
+      card.className = "yape-card";
+      
+      const fecha = data.received_at ? new Date(data.received_at).toLocaleTimeString() : "Reciente";
+      const codigo = data.codigoSeguridad ? `Cód: ${data.codigoSeguridad}` : "Sin cód.";
+      const dev = data.deviceId ? ` | ${data.deviceId}` : "";
+
+      card.innerHTML = `
+        <div class="yape-header">
+          <span class="remitente">${data.remitente}</span>
+          <span class="monto">S/ ${data.monto.toFixed(2)}</span>
+        </div>
+        <div class="detalles">
+          <span>${codigo}${dev}</span>
+          <span>${fecha}</span>
+        </div>
+      `;
+      return card;
+    }
+  </script>
 </body>
 </html>
