@@ -55,10 +55,30 @@
     .yape-card { background: var(--panel-bg); padding: 16px; border-radius: 10px; border: 1px solid var(--panel-border); border-left: 4px solid var(--yape-purple); display: flex; flex-direction: column; gap: 10px; animation: fadeIn 0.25s ease-out; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
     .yape-card:hover { border-left-color: var(--yape-purple-bright); box-shadow: 0 4px 20px var(--yape-purple-soft); }
 
-    .yape-row-main { display: flex; justify-content: space-between; align-items: baseline; }
-    .remitente { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
-    .monto { font-size: 1.25rem; font-weight: 700; color: var(--status-green); font-variant-numeric: tabular-nums; }
+    .yape-row-main { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: flex-start; 
+    gap: 8px;
+    }
 
+    .remitente { 
+    font-size: 0.95rem; 
+    font-weight: 600; 
+    color: var(--text-primary); 
+    letter-spacing: -0.1px; 
+    flex: 1;
+    min-width: 0;
+    }
+
+    .monto { 
+    font-size: 1.25rem; 
+    font-weight: 700; 
+    color: var(--status-green); 
+    font-variant-numeric: tabular-nums; 
+    white-space: nowrap;
+    flex-shrink: 0;
+    }
     .yape-row-sub { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-secondary); }
     .meta-tag { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; color: var(--text-secondary); }
 
