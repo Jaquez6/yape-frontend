@@ -316,9 +316,8 @@
       card.className = "yape-card";
 
       let fechaTexto = "Reciente";
-      if (data.received_at) {
-        const strIso = data.received_at.endsWith("Z") ? data.received_at : data.received_at + "Z";
-        const fechaObj = new Date(strIso);
+      if (data.timestamp) {
+        const fechaObj = new Date(data.timestamp); // milisegundos directo, sin parseo ISO
 
         fechaTexto = fechaObj.toLocaleString("es-PE", {
           timeZone: "America/Lima",
@@ -355,9 +354,8 @@
       const hoyLima = new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
 
       const totalHoy = yapesList.reduce((acc, item) => {
-        if (!item.received_at) return acc;
-        const strIso = item.received_at.endsWith("Z") ? item.received_at : item.received_at + "Z";
-        const itemFechaLima = new Date(strIso).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+        if (!item.timestamp) return acc;
+        const itemFechaLima = new Date(item.timestamp).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
 
         return itemFechaLima === hoyLima ? acc + (Number(item.monto) || 0) : acc;
       }, 0);
