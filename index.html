@@ -170,10 +170,17 @@
     document.getElementById("lock-sede-id").addEventListener("keypress", (e) => {
       if (e.key === "Enter") intentarEntrar();
     });
-    
+
     async function intentarEntrar() {
         const sedeId = document.getElementById("lock-sede-id").value.trim();
         const clave = document.getElementById("lock-input").value;
+        const btn = document.getElementById("lock-btn");
+        const errorMsg = document.getElementById("lock-error");
+
+        errorMsg.style.display = "none";
+        btn.disabled = true;
+        btn.innerText = "Ingresando...";
+
         try {
             const res = await fetch(`${API_BASE}/login`, {
             method: "POST",
@@ -182,8 +189,8 @@
             });
             if (!res.ok) {
             const errorData = await res.json();
-            document.getElementById("lock-error").innerText = errorData.detail || "Clave incorrecta";
-            document.getElementById("lock-error").style.display = "block";
+            errorMsg.innerText = errorData.detail || "Clave incorrecta";
+            errorMsg.style.display = "block";
             return;
             }
             const data = await res.json();
@@ -193,8 +200,11 @@
             document.getElementById("lock-screen").style.display = "none";
             iniciarApp();
         } catch (err) {
-            document.getElementById("lock-error").innerText = "Error de conexión";
-            document.getElementById("lock-error").style.display = "block";
+            errorMsg.innerText = "Error de conexión";
+            errorMsg.style.display = "block";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Entrar";
         }
     }
 
