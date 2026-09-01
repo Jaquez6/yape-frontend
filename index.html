@@ -118,9 +118,10 @@
 </head>
 <body>
 
-  <div id="lock-screen">
-    <p style="color:var(--text-secondary); font-size:0.9rem;">Ingresa la clave</p>
-    <input id="lock-input" type="password" />
+    <div id="lock-screen">
+    <p style="color:var(--text-secondary); font-size:0.9rem;">Ingresa tu sede y clave</p>
+    <input id="lock-sede-id" type="text" placeholder="Sede (ej: qf_lima)" style="background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; text-align: center;" />
+    <input id="lock-input" type="password" placeholder="Contraseña" />
     <button id="lock-btn" class="btn">Entrar</button>
     <p id="lock-error" style="color:#f87171; font-size:0.8rem; display:none;">Clave incorrecta</p>
   </div>
@@ -166,14 +167,18 @@
     document.getElementById("lock-input").addEventListener("keypress", (e) => {
       if (e.key === "Enter") intentarEntrar();
     });
-
+    document.getElementById("lock-sede-id").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") intentarEntrar();
+    });
+    
     async function intentarEntrar() {
+        const sedeId = document.getElementById("lock-sede-id").value.trim();
         const clave = document.getElementById("lock-input").value;
         try {
             const res = await fetch(`${API_BASE}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password: clave })
+            body: JSON.stringify({ sede_id: sedeId, password: clave })
             });
             if (!res.ok) {
             const errorData = await res.json();
