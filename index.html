@@ -208,13 +208,6 @@
         }
     }
 
-    function cerrarSesionPorExpiracion() {
-        localStorage.removeItem("yape_token");
-        localStorage.removeItem("yape_tipo");
-        localStorage.removeItem("yape_device");
-        location.reload();
-    }
-
     function iniciarApp() {
         const tipo = localStorage.getItem("yape_tipo");
         const deviceAsignado = localStorage.getItem("yape_device");
@@ -251,10 +244,6 @@
             const res = await fetch(`${API_BASE}/devices`, {
             headers: { "Authorization": `Bearer ${token}` }
             });
-            if (res.status === 401) {
-            cerrarSesionPorExpiracion();
-            return;
-            }
             const data = await res.json();
             const devices = data.devices || [];
 
@@ -310,10 +299,6 @@
             const res = await fetch(fetchUrl, {
             headers: { "Authorization": `Bearer ${token}` }
             });
-            if (res.status === 401) {
-            cerrarSesionPorExpiracion();
-            return;
-            }
             const history = await res.json();
 
             currentYapes = history;
@@ -327,11 +312,6 @@
             ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
             : `${API_BASE}/yapes/stream?token=${token}`;
         const eventSource = new EventSource(streamUrl);
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            cerrarSesionPorExpiracion();
-        };
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
