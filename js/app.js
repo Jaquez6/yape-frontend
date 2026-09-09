@@ -51,6 +51,54 @@ export async function renderDashboardView() {
   }
 }
 
+// ============================================================
+// Estado del feed (buscador, filtros, paginación).
+//
+// Vive en una sola variable de módulo porque esta app solo muestra
+// un feed a la vez (no hay dos vistas de búsqueda simultáneas).
+// Se reinicia por completo cada vez que renderFeedView() se llama.
+// ============================================================
+
+const DEBOUNCE_MS = 300;
+const LIMA_OFFSET = "-05:00"; // Perú no tiene horario de verano, el offset es fijo
+
+let estadoFeed = null;
+
+function crearEstadoInicial(device, esAdmin) {
+  return {
+    device,
+    esAdmin,
+    q: "",
+    horaDesde: "",
+    horaHasta: "",
+    fechaDesde: "",
+    fechaHasta: "",
+    // Sede parte viendo solo lo accionable; admin/contable ve todo.
+    soloEstado: esAdmin ? "todos" : "sin_reclamar",
+    cursor: null,
+    hayMas: true,
+    cargando: false,
+    abortController: null,
+    debounceId: null,
+    tocoFiltroAlgunaVez: false, // true en cuanto el usuario toca cualquier control
+    cargoMasDeUnaTanda: false,
+    pendientesNuevos: [], // yapeos que llegaron por SSE mientras había filtro activo
+  };
+}
+
+function filtroActivo(estado) {
+  const defaultEstado = estado.esAdmin ? "todos" : "sin_reclamar";
+  return (
+    estado.q.trim() !== "" ||
+    estado.soloEstado !== defaultEstado ||
+    estado.horaDesde !== "" ||
+    estado.horaHasta !== "" ||
+    estado.fechaDesde !== "" ||
+    estado.fechaHasta !== "" ||
+    estado.cargoMasDeUnaTanda
+  );
+}
+
 export async function renderFeedView(device) {
   const app = document.getElementById("app");
   const esAdmin = localStorage.getItem("yape_tipo") === "admin";
@@ -60,49 +108,400 @@ export async function renderFeedView(device) {
   document.getElementById("total-day-card").style.display = "flex";
   document.getElementById("live-indicator").style.display = "flex";
 
+  estadoFeed = crearEstadoInicial(device, esAdmin);
+
   app.innerHTML = `
     ${esAdmin ? `<div class="nav-bar"><a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a></div>` : ""}
+    ${renderBarraFiltros(esAdmin)}
+    <p id="contador-resultados" role="status" aria-live="polite"
+       style="font-size:0.75rem; color:var(--text-secondary); margin:0 0 10px 0; min-height:1em;"></p>
+    <div id="chip-nuevos" style="display:none; margin-bottom:10px;"></div>
     <div id="yape-list" class="yape-list"></div>
+    <p id="estado-vacio" style="display:none; text-align:center; color:var(--text-secondary); font-size:0.85rem; padding:20px 0;"></p>
+    <button id="btn-cargar-mas" class="btn btn-secondary" style="display:none; width:100%; margin-top:14px;">Cargar más</button>
   `;
 
-  let currentYapes = [];
-  const listContainer = document.getElementById("yape-list");
-  const token = localStorage.getItem("yape_token");
+  conectarControlesFiltro(esAdmin);
+  await Promise.all([ejecutarBusqueda(true), cargarResumenDia()]);
+  conectarSSE(device);
+}
 
-  try {
-    const path = device ? `/yapes?device=${encodeURIComponent(device)}` : `/yapes`;
-    const res = await apiFetch(path);
-    const history = await res.json();
+function renderBarraFiltros(esAdmin) {
+  return `
+    <div id="filtros-bar" style="display:flex; flex-direction:column; gap:8px; margin-bottom:6px;">
+      <input id="input-busqueda" type="text" placeholder="Buscar por código, monto o nombre..."
+        autocomplete="off"
+        style="background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--text-primary);
+               padding:11px 14px; border-radius:8px; font-size:0.95rem; width:100%;" />
 
-    currentYapes = history;
-    history.forEach(item => listContainer.appendChild(createYapeCard(item)));
-    updateDayTotal(currentYapes);
-  } catch (err) {
-    console.error("Error al cargar historial:", err);
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
+          Desde
+          <input id="hora-desde" type="time" style="${estiloInputChico()}" />
+        </label>
+        <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
+          Hasta
+          <input id="hora-hasta" type="time" style="${estiloInputChico()}" />
+        </label>
+
+        ${esAdmin ? `
+          <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
+            Fecha desde
+            <input id="fecha-desde" type="date" style="${estiloInputChico()}" />
+          </label>
+          <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
+            Fecha hasta
+            <input id="fecha-hasta" type="date" style="${estiloInputChico()}" />
+          </label>
+        ` : ""}
+
+        <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px; margin-left:auto;">
+          <input id="check-solo-sin-reclamar" type="checkbox" ${esAdmin ? "" : "checked"} />
+          Solo sin reclamar
+        </label>
+
+        ${esAdmin ? `<button id="btn-exportar" class="btn btn-secondary" style="font-size:0.75rem; padding:5px 10px;">Exportar CSV</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function estiloInputChico() {
+  return "background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--text-primary); " +
+         "border-radius:6px; padding:4px 6px; font-size:0.78rem;";
+}
+
+function conectarControlesFiltro(esAdmin) {
+  const inputBusqueda = document.getElementById("input-busqueda");
+  inputBusqueda.addEventListener("input", () => {
+    estadoFeed.q = inputBusqueda.value;
+    estadoFeed.tocoFiltroAlgunaVez = true;
+    dispararBusquedaConDebounce();
+  });
+
+  document.getElementById("hora-desde").addEventListener("change", (e) => {
+    estadoFeed.horaDesde = e.target.value;
+    estadoFeed.tocoFiltroAlgunaVez = true;
+    ejecutarBusqueda(true);
+  });
+  document.getElementById("hora-hasta").addEventListener("change", (e) => {
+    estadoFeed.horaHasta = e.target.value;
+    estadoFeed.tocoFiltroAlgunaVez = true;
+    ejecutarBusqueda(true);
+  });
+
+  if (esAdmin) {
+    document.getElementById("fecha-desde").addEventListener("change", (e) => {
+      estadoFeed.fechaDesde = e.target.value;
+      estadoFeed.tocoFiltroAlgunaVez = true;
+      ejecutarBusqueda(true);
+    });
+    document.getElementById("fecha-hasta").addEventListener("change", (e) => {
+      estadoFeed.fechaHasta = e.target.value;
+      estadoFeed.tocoFiltroAlgunaVez = true;
+      ejecutarBusqueda(true);
+    });
+    document.getElementById("btn-exportar").addEventListener("click", exportarCSV);
   }
 
-  const { API_BASE } = await import("./api.js");
-  const streamUrl = device
-    ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
-    : `${API_BASE}/yapes/stream?token=${token}`;
-  const eventSource = new EventSource(streamUrl);
+  document.getElementById("check-solo-sin-reclamar").addEventListener("change", (e) => {
+    estadoFeed.soloEstado = e.target.checked ? "sin_reclamar" : "todos";
+    estadoFeed.tocoFiltroAlgunaVez = true;
+    ejecutarBusqueda(true);
+  });
 
-  eventSource.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+  document.getElementById("btn-cargar-mas").addEventListener("click", () => {
+    estadoFeed.cargoMasDeUnaTanda = true;
+    ejecutarBusqueda(false);
+  });
+}
 
-    if (data.tipo === "reclamo") {
-      actualizarEstadoTarjeta(data.yape_id, data.reclamado_por);
-      return;
+// ============================================================
+// Validación del término de búsqueda antes de disparar la request.
+//
+// Numérico (código o monto) -> válido desde el primer dígito.
+// Texto -> mínimo 3 caracteres, si no Postgres no tiene trigramas
+// suficientes y cae a escaneo completo.
+// ============================================================
+function terminoValido(q) {
+  const t = q.trim();
+  if (!t) return true; // vacío = sin filtro de texto, siempre válido
+  if (/^\d+([.,]\d{1,2})?$/.test(t)) return true;
+  return t.length >= 3;
+}
+
+function dispararBusquedaConDebounce() {
+  clearTimeout(estadoFeed.debounceId);
+
+  const contador = document.getElementById("contador-resultados");
+  if (!terminoValido(estadoFeed.q)) {
+    contador.innerText = "Escribe al menos 3 letras para buscar por nombre";
+    return;
+  }
+
+  // Feedback inmediato: el spinner aparece al instante aunque la
+  // request recién salga 300ms después.
+  contador.innerText = "Buscando...";
+
+  estadoFeed.debounceId = setTimeout(() => ejecutarBusqueda(true), DEBOUNCE_MS);
+}
+
+// Combina fecha + hora en ISO con el offset fijo de Lima.
+// Si falta la hora, usa el límite del día (00:00 o 23:59:59).
+// El "hasta" siempre cierra en :59 -- incluso con hora explícita --
+// para que "hasta las 18:00" incluya todo ese minuto y no lo excluya
+// por los segundos.
+function construirISO(fecha, hora, esInicio) {
+  if (!fecha && !hora) return null;
+
+  const fechaEf = fecha || new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+  const horaEf = hora || (esInicio ? "00:00" : "23:59");
+  const segundos = esInicio ? ":00" : ":59";
+
+  return `${fechaEf}T${horaEf}${segundos}${LIMA_OFFSET}`;
+}
+
+function calcularRangoISO(estado) {
+  const desde = construirISO(estado.fechaDesde, estado.horaDesde, true);
+  const hasta = construirISO(estado.fechaHasta || estado.fechaDesde, estado.horaHasta, false);
+  return { desde, hasta };
+}
+
+async function ejecutarBusqueda(reset) {
+  const estado = estadoFeed;
+  if (!estado) return; // la vista ya cambió (p.ej. el usuario navegó)
+
+  if (reset) {
+    if (estado.abortController) estado.abortController.abort();
+    estado.cursor = null;
+    estado.hayMas = true;
+    document.getElementById("yape-list").innerHTML = "";
+    document.getElementById("estado-vacio").style.display = "none";
+  }
+
+  if (!estado.hayMas || estado.cargando) return;
+
+  estado.cargando = true;
+  const controller = new AbortController();
+  estado.abortController = controller;
+
+  const params = new URLSearchParams();
+  const t = estado.q.trim();
+  if (t) params.set("q", t);
+  params.set("estado", estado.soloEstado);
+  if (estado.device) params.set("device", estado.device);
+  if (estado.cursor) {
+    params.set("cursor_ts", estado.cursor.cursor_ts);
+    params.set("cursor_id", estado.cursor.cursor_id);
+  }
+
+  const { desde, hasta } = calcularRangoISO(estado);
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+
+  try {
+    const res = await apiFetch(`/yapes?${params.toString()}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (estado !== estadoFeed) return; // la vista cambió mientras esperábamos
+
+    const listContainer = document.getElementById("yape-list");
+    data.items.forEach(item => listContainer.appendChild(createYapeCard(item)));
+
+    estado.cursor = data.siguiente;
+    estado.hayMas = !!data.siguiente;
+
+    document.getElementById("btn-cargar-mas").style.display = estado.hayMas ? "block" : "none";
+    actualizarContador(data, estado, reset);
+
+    if (reset && data.items.length === 0) {
+      mostrarEstadoVacio(estado);
     }
+  } catch (err) {
+    if (err.name === "AbortError") return; // reemplazada por una búsqueda más nueva
+    console.error("Error en búsqueda:", err);
+    document.getElementById("contador-resultados").innerText = "Error al buscar. Intenta de nuevo.";
+  } finally {
+    if (estado === estadoFeed) estado.cargando = false;
+  }
+}
 
-    currentYapes.unshift(data);
-    listContainer.prepend(createYapeCard(data));
-    updateDayTotal(currentYapes);
+function actualizarContador(data, estado, reset) {
+  const contador = document.getElementById("contador-resultados");
+  if (data.resumen_filtrado) {
+    contador.innerText = `${data.resumen_filtrado.cantidad} resultado(s) · S/ ${data.resumen_filtrado.suma.toFixed(2)}`;
+  } else if (reset) {
+    contador.innerText = "";
+  }
+}
 
-    if (soundEnabled) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
-    }
+function mostrarEstadoVacio(estado) {
+  const vacio = document.getElementById("estado-vacio");
+
+  if (estado.soloEstado === "sin_reclamar") {
+    vacio.innerHTML = `
+      No hay pagos sin reclamar${estado.q ? " con ese criterio" : ""}.<br>
+      <button id="btn-ver-reclamados" class="btn btn-secondary" style="margin-top:10px;">Ver los ya reclamados</button>
+    `;
+    vacio.style.display = "block";
+    document.getElementById("btn-ver-reclamados").addEventListener("click", () => {
+      document.getElementById("check-solo-sin-reclamar").checked = false;
+      estado.soloEstado = "todos";
+      estado.tocoFiltroAlgunaVez = true;
+      ejecutarBusqueda(true);
+    });
+  } else {
+    vacio.innerText = "Sin resultados para esta búsqueda.";
+    vacio.style.display = "block";
+  }
+}
+
+// ============================================================
+// Resumen del día (total fijo, separado del subtotal de búsqueda)
+// ============================================================
+
+async function cargarResumenDia() {
+  try {
+    const res = await apiFetch("/yapes/resumen");
+    if (!res.ok) return;
+    const data = await res.json();
+    pintarResumenDia(data);
+  } catch (err) {
+    console.error("Error al cargar el resumen del día:", err);
+  }
+}
+
+function pintarResumenDia(data) {
+  const label = document.querySelector("#total-day-card .summary-label");
+  const monto = document.getElementById("total-day-amount");
+  if (label) label.innerText = data.alcance === "sede" ? "Mis reclamados hoy:" : "Hoy:";
+  if (monto) monto.innerText = `S/ ${data.suma.toFixed(2)}`;
+  monto.dataset.cantidad = data.cantidad; // por si se necesita luego
+}
+
+function incrementarResumenDia(monto) {
+  const el = document.getElementById("total-day-amount");
+  if (!el) return;
+  const actual = parseFloat(el.innerText.replace("S/", "").trim()) || 0;
+  el.innerText = `S/ ${(actual + Number(monto)).toFixed(2)}`;
+}
+
+// ============================================================
+// Export CSV (solo admin)
+// ============================================================
+
+async function exportarCSV() {
+  const estado = estadoFeed;
+  const params = new URLSearchParams();
+  const t = estado.q.trim();
+  if (t) params.set("q", t);
+  params.set("estado", estado.soloEstado);
+  if (estado.device) params.set("device", estado.device);
+
+  const { desde, hasta } = calcularRangoISO(estado);
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+
+  const btn = document.getElementById("btn-exportar");
+  btn.disabled = true;
+  btn.innerText = "Exportando...";
+
+  try {
+    // No se puede usar un <a href> directo porque el endpoint requiere
+    // el header Authorization -- lo traemos como blob y disparamos la
+    // descarga manualmente.
+    const res = await apiFetch(`/yapes/export?${params.toString()}`);
+    if (!res.ok) throw new Error("Error al exportar");
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "yapes_export.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("No se pudo exportar. Intenta de nuevo.");
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Exportar CSV";
+  }
+}
+
+// ============================================================
+// SSE: conecta y decide si inserta en vivo o guarda como pendiente
+// ============================================================
+
+function conectarSSE(device) {
+  const token = localStorage.getItem("yape_token");
+  const estado = estadoFeed;
+
+  const armarUrl = async () => {
+    const { API_BASE } = await import("./api.js");
+    return device
+      ? `${API_BASE}/yapes/stream?device=${encodeURIComponent(device)}&token=${token}`
+      : `${API_BASE}/yapes/stream?token=${token}`;
+  };
+
+  armarUrl().then(streamUrl => {
+    const eventSource = new EventSource(streamUrl);
+
+    eventSource.onmessage = (event) => {
+      if (estado !== estadoFeed) {
+        eventSource.close(); // la vista cambió, esta conexión ya no sirve
+        return;
+      }
+
+      const data = JSON.parse(event.data);
+
+      if (data.tipo === "reclamo") {
+        actualizarEstadoTarjeta(data.yape_id, data.reclamado_por);
+        if (!estado.esAdmin && data.reclamado_por === localStorage.getItem("yape_sede_id")) {
+          // Nota: esto suma en cada reclamo propio, incluyendo reasignaciones
+          // hacia la sede. No resta si se reasigna AWAY -- caso raro, se
+          // corrige recargando el resumen si hace falta.
+          cargarResumenDia();
+        }
+        return;
+      }
+
+      // data.tipo === "nuevo_yapeo"
+      if (estado.esAdmin) incrementarResumenDia(data.monto);
+
+      if (filtroActivo(estado)) {
+        estado.pendientesNuevos.push(data);
+        mostrarChipNuevos(estado);
+      } else {
+        document.getElementById("yape-list").prepend(createYapeCard(data));
+        if (soundEnabled) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        }
+      }
+    };
+  });
+}
+
+function mostrarChipNuevos(estado) {
+  const chip = document.getElementById("chip-nuevos");
+  const n = estado.pendientesNuevos.length;
+  chip.style.display = "block";
+  chip.innerHTML = `
+    <button class="btn" style="width:100%;">
+      ${n} yapeo${n > 1 ? "s" : ""} nuevo${n > 1 ? "s" : ""} · ver
+    </button>
+  `;
+  chip.querySelector("button").onclick = () => {
+    // Limpiar filtros de texto/fecha no correspondería acá -- solo
+    // recargamos la búsqueda actual, que ya va a incluir lo nuevo
+    // porque quedó guardado en el servidor.
+    estado.pendientesNuevos = [];
+    chip.style.display = "none";
+    ejecutarBusqueda(true);
   };
 }
 
@@ -186,7 +585,7 @@ async function reclamarYapeo(yapeId) {
 
   if (res.status === 409) {
     const data = await res.json();
-    alert(data.detail || "Ya fue reclamado por otra sede");
+    alert((data.detail || "Ya fue reclamado por otra sede") + "\n\nNo entregues el producto. Comunica el caso a contabilidad con el código del yapeo.");
   } else if (!res.ok) {
     alert("Error al reclamar el yapeo");
   }
@@ -252,21 +651,6 @@ async function confirmarAsignacion(yapeId) {
 
   if (!res.ok) alert("Error al asignar");
   // igual que en reclamarYapeo: el SSE actualiza la tarjeta, no lo hacemos acá
-}
-
-function updateDayTotal(yapesList) {
-  const totalContainer = document.getElementById("total-day-amount");
-  if (!totalContainer) return;
-
-  const hoyLima = new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
-
-  const totalHoy = yapesList.reduce((acc, item) => {
-    if (!item.timestamp) return acc;
-    const itemFechaLima = new Date(item.timestamp).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
-    return itemFechaLima === hoyLima ? acc + (Number(item.monto) || 0) : acc;
-  }, 0);
-
-  totalContainer.innerText = `S/ ${totalHoy.toFixed(2)}`;
 }
 
 // toggleAsignacion, cancelarAsignacion y confirmarAsignacion se llaman desde
