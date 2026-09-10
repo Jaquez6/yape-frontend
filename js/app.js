@@ -62,6 +62,13 @@ export async function renderDashboardView() {
 const DEBOUNCE_MS = 300;
 const LIMA_OFFSET = "-05:00"; // Perú no tiene horario de verano, el offset es fijo
 
+const HORA_DESDE_DEFAULT = "00:00";
+const HORA_HASTA_DEFAULT = "23:59";
+
+function hoyEnLima() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+}
+
 let estadoFeed = null;
 
 function crearEstadoInicial(device, esAdmin) {
@@ -69,12 +76,13 @@ function crearEstadoInicial(device, esAdmin) {
     device,
     esAdmin,
     q: "",
-    horaDesde: "",
-    horaHasta: "",
-    fechaDesde: "",
-    fechaHasta: "",
+    horaDesde: HORA_DESDE_DEFAULT,
+    horaHasta: HORA_HASTA_DEFAULT,
+    fechaDesde: hoyEnLima(),
+    fechaHasta: hoyEnLima(),
     // Sede parte viendo solo lo accionable; admin/contable ve todo.
     soloEstado: esAdmin ? "todos" : "sin_reclamar",
+    reclamadaPor: "",
     cursor: null,
     hayMas: true,
     cargando: false,
@@ -91,10 +99,11 @@ function filtroActivo(estado) {
   return (
     estado.q.trim() !== "" ||
     estado.soloEstado !== defaultEstado ||
-    estado.horaDesde !== "" ||
-    estado.horaHasta !== "" ||
-    estado.fechaDesde !== "" ||
-    estado.fechaHasta !== "" ||
+    estado.horaDesde !== HORA_DESDE_DEFAULT ||
+    estado.horaHasta !== HORA_HASTA_DEFAULT ||
+    estado.fechaDesde !== hoyEnLima() ||
+    estado.fechaHasta !== hoyEnLima() ||
+    estado.reclamadaPor !== "" ||
     estado.cargoMasDeUnaTanda
   );
 }
@@ -113,6 +122,7 @@ export async function renderFeedView(device) {
   app.innerHTML = `
     ${esAdmin ? `<div class="nav-bar"><a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a></div>` : ""}
     ${renderBarraFiltros(esAdmin)}
+    <div id="pendientes-anteriores-cont" style="display:none; margin-bottom:14px;"></div>
     <p id="contador-resultados" role="status" aria-live="polite"
        style="font-size:0.75rem; color:var(--text-secondary); margin:0 0 10px 0; min-height:1em;"></p>
     <div id="chip-nuevos" style="display:none; margin-bottom:10px;"></div>
@@ -122,7 +132,7 @@ export async function renderFeedView(device) {
   `;
 
   conectarControlesFiltro(esAdmin);
-  await Promise.all([ejecutarBusqueda(true), cargarResumenDia()]);
+  await Promise.all([ejecutarBusqueda(true), cargarResumenDia(), actualizarPendientes()]);
   conectarSSE(device);
 }
 
@@ -137,21 +147,27 @@ function renderBarraFiltros(esAdmin) {
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
           Desde
-          <input id="hora-desde" type="time" style="${estiloInputChico()}" />
+          <input id="hora-desde" type="time" value="${HORA_DESDE_DEFAULT}" style="${estiloInputChico()}" />
         </label>
         <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
           Hasta
-          <input id="hora-hasta" type="time" style="${estiloInputChico()}" />
+          <input id="hora-hasta" type="time" value="${HORA_HASTA_DEFAULT}" style="${estiloInputChico()}" />
         </label>
 
         ${esAdmin ? `
           <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
             Fecha desde
-            <input id="fecha-desde" type="date" style="${estiloInputChico()}" />
+            <input id="fecha-desde" type="date" value="${hoyEnLima()}" style="${estiloInputChico()}" />
           </label>
           <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
             Fecha hasta
-            <input id="fecha-hasta" type="date" style="${estiloInputChico()}" />
+            <input id="fecha-hasta" type="date" value="${hoyEnLima()}" style="${estiloInputChico()}" />
+          </label>
+          <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px;">
+            Sede
+            <select id="filtro-sede-reclamante" style="${estiloInputChico()}">
+              <option value="">Todas</option>
+            </select>
           </label>
         ` : ""}
 
@@ -201,6 +217,16 @@ function conectarControlesFiltro(esAdmin) {
       estadoFeed.tocoFiltroAlgunaVez = true;
       ejecutarBusqueda(true);
     });
+    const selectSedeReclamante = document.getElementById("filtro-sede-reclamante");
+    obtenerSedes().then(sedes => {
+      sedes.forEach(s => selectSedeReclamante.add(new Option(s, s)));
+    });
+    selectSedeReclamante.addEventListener("change", (e) => {
+      estadoFeed.reclamadaPor = e.target.value;
+      estadoFeed.tocoFiltroAlgunaVez = true;
+      ejecutarBusqueda(true);
+    });
+    
     document.getElementById("btn-exportar").addEventListener("click", exportarCSV);
   }
 
@@ -236,6 +262,11 @@ function dispararBusquedaConDebounce() {
   const contador = document.getElementById("contador-resultados");
   if (!terminoValido(estadoFeed.q)) {
     contador.innerText = "Escribe al menos 3 letras para buscar por nombre";
+    if (!estadoFeed.esAdmin) {
+      const cont = document.getElementById("pendientes-anteriores-cont");
+      cont.style.display = "none";
+      cont.innerHTML = "";
+    }
     return;
   }
 
@@ -254,11 +285,16 @@ function dispararBusquedaConDebounce() {
 function construirISO(fecha, hora, esInicio) {
   if (!fecha && !hora) return null;
 
-  const fechaEf = fecha || new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
-  const horaEf = hora || (esInicio ? "00:00" : "23:59");
-  const segundos = esInicio ? ":00" : ":59";
+  const fechaEf = fecha || hoyEnLima();
+  let horaEf = hora || (esInicio ? "00:00" : "23:59");
 
-  return `${fechaEf}T${horaEf}${segundos}${LIMA_OFFSET}`;
+  // El input type=time devuelve "HH:MM", o "HH:MM:SS" si tiene step="1".
+  // Solo agregamos los segundos si no vienen ya.
+  if (horaEf.split(":").length === 2) {
+    horaEf += esInicio ? ":00" : ":59";
+  }
+
+  return `${fechaEf}T${horaEf}${LIMA_OFFSET}`;
 }
 
 function calcularRangoISO(estado) {
@@ -290,6 +326,7 @@ async function ejecutarBusqueda(reset) {
   if (t) params.set("q", t);
   params.set("estado", estado.soloEstado);
   if (estado.device) params.set("device", estado.device);
+  if (estado.reclamadaPor) params.set("reclamado_por_filtro", estado.reclamadaPor);
   if (estado.cursor) {
     params.set("cursor_ts", estado.cursor.cursor_ts);
     params.set("cursor_id", estado.cursor.cursor_id);
@@ -301,7 +338,14 @@ async function ejecutarBusqueda(reset) {
 
   try {
     const res = await apiFetch(`/yapes?${params.toString()}`, { signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      let detalle = `Error ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.detail) detalle = errJson.detail;
+      } catch (_) { /* la respuesta no era JSON */ }
+      throw new Error(detalle);
+    }
     const data = await res.json();
 
     if (estado !== estadoFeed) return; // la vista cambió mientras esperábamos
@@ -318,10 +362,11 @@ async function ejecutarBusqueda(reset) {
     if (reset && data.items.length === 0) {
       mostrarEstadoVacio(estado);
     }
+    if (reset) actualizarPendientes();
   } catch (err) {
     if (err.name === "AbortError") return; // reemplazada por una búsqueda más nueva
     console.error("Error en búsqueda:", err);
-    document.getElementById("contador-resultados").innerText = "Error al buscar. Intenta de nuevo.";
+    document.getElementById("contador-resultados").innerText = err.message || "Error al buscar. Intenta de nuevo.";
   } finally {
     if (estado === estadoFeed) estado.cargando = false;
   }
@@ -372,6 +417,76 @@ async function cargarResumenDia() {
   }
 }
 
+async function actualizarPendientes() {
+  const estado = estadoFeed;
+  if (!estado) return;
+  const cont = document.getElementById("pendientes-anteriores-cont");
+
+  // Sede: solo se consulta si hay un término de búsqueda válido en curso.
+  // Sin búsqueda no se muestra nada -- nunca un contador esperando a vaciarse.
+  if (!estado.esAdmin) {
+    const t = estado.q.trim();
+    if (!t || !terminoValido(t)) {
+      cont.style.display = "none";
+      cont.innerHTML = "";
+      return;
+    }
+  } else {
+    // Admin: la sección solo se muestra mientras está en la vista de HOY
+    // (sin tocar sus filtros de fecha). Si movió el rango a otro lado,
+    // su propio feed + "solo sin reclamar" ya cubre esa auditoría, y
+    // mostrar la sección aparte duplicaría resultados.
+    const viendoHoy = estado.fechaDesde === hoyEnLima() && estado.fechaHasta === hoyEnLima();
+    if (!viendoHoy) {
+      cont.style.display = "none";
+      cont.innerHTML = "";
+      return;
+    }
+  }
+
+  try {
+    const params = new URLSearchParams();
+    const t = estado.q.trim();
+    if (t) params.set("q", t);
+    const res = await apiFetch(`/yapes/pendientes-anteriores?${params.toString()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (estado !== estadoFeed) return;
+
+    pintarPendientes(data.items, estado.esAdmin);
+  } catch (err) {
+    console.error("Error al cargar pendientes:", err);
+  }
+}
+
+function pintarPendientes(items, esAdmin) {
+  const cont = document.getElementById("pendientes-anteriores-cont");
+
+  if (items.length === 0) {
+    if (esAdmin) {
+      cont.style.display = "block";
+      cont.innerHTML = `<p style="color:var(--text-secondary); font-size:0.8rem; padding:6px 0;">Sin pendientes de días anteriores.</p>`;
+    } else {
+      cont.style.display = "none";
+      cont.innerHTML = "";
+    }
+    return;
+  }
+
+  cont.style.display = "block";
+  const titulo = esAdmin
+    ? `<p style="color:var(--text-secondary); font-size:0.8rem; font-weight:600; margin-bottom:8px;">Pendientes de días anteriores (${items.length})</p>`
+    : `<p style="color:var(--text-secondary); font-size:0.8rem; font-weight:600; margin-bottom:8px;">De días anteriores</p>`;
+
+  const lista = document.createElement("div");
+  lista.className = "yape-list";
+  items.forEach(item => lista.appendChild(createYapeCard(item, { esPendiente: true })));
+
+  cont.innerHTML = titulo;
+  cont.appendChild(lista);
+}
+
 function pintarResumenDia(data) {
   const label = document.querySelector("#total-day-card .summary-label");
   const monto = document.getElementById("total-day-amount");
@@ -398,6 +513,7 @@ async function exportarCSV() {
   if (t) params.set("q", t);
   params.set("estado", estado.soloEstado);
   if (estado.device) params.set("device", estado.device);
+  if (estado.reclamadaPor) params.set("reclamado_por_filtro", estado.reclamadaPor);
 
   const { desde, hasta } = calcularRangoISO(estado);
   if (desde) params.set("desde", desde);
@@ -518,7 +634,7 @@ function actualizarEstadoTarjeta(yapeId, reclamadoPor) {
   if (card) card.style.cursor = "default";
 }
 
-function createYapeCard(data) {
+function createYapeCard(data, opts = {}) {
   const card = document.createElement("div");
   card.className = "yape-card";
   card.id = "yape-" + data.id;
@@ -534,12 +650,13 @@ function createYapeCard(data) {
   }
 
   const codigo = data.codigoSeguridad ? `<span class="meta-tag">Cód: ${data.codigoSeguridad}</span>` : "";
+  const etiquetaPendiente = opts.esPendiente ? `<span class="meta-tag">Pendiente</span> ` : "";
   const dev = data.deviceId ? `<span class="meta-tag">${data.deviceId}</span>` : "";
   const esAdmin = localStorage.getItem("yape_tipo") === "admin";
 
   card.innerHTML = `
     <div class="yape-row-main">
-      <span class="remitente">${data.remitente}</span>
+      <span class="remitente">${etiquetaPendiente}${data.remitente}</span>
       <span class="monto">S/ ${data.monto.toFixed(2)}</span>
     </div>
     <div class="yape-row-sub">
@@ -550,13 +667,13 @@ function createYapeCard(data) {
 
   if (!data.reclamado_por && !esAdmin) {
     card.style.cursor = "pointer";
-    card.addEventListener("click", () => abrirModalReclamo(data.id, data.remitente, data.monto, fechaTexto, data.codigoSeguridad));
+    card.addEventListener("click", () => abrirModalReclamo(data.id, data.remitente, data.monto, fechaTexto, data.codigoSeguridad, opts.esPendiente));
   }
 
   return card;
 }
 
-function abrirModalReclamo(yapeId, remitente, monto, fechaTexto, codigo) {
+function abrirModalReclamo(yapeId, remitente, monto, fechaTexto, codigo, esPendiente) {
   const overlay = document.createElement("div");
   overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000;";
   overlay.innerHTML = `
@@ -565,6 +682,7 @@ function abrirModalReclamo(yapeId, remitente, monto, fechaTexto, codigo) {
       <p style="font-weight:600; font-size:1rem;">${remitente}</p>
       <p style="color:var(--status-green); font-weight:700; font-size:1.15rem; margin:4px 0;">S/ ${monto.toFixed(2)}</p>
       ${codigo ? `<p style="color:var(--text-secondary); font-size:0.8rem;">Cód: ${codigo}</p>` : ""}
+      ${esPendiente ? `<p style="color:var(--text-secondary); font-size:0.78rem; margin:4px 0;">Es de un día anterior. Confirma que corresponde a una venta tuya.</p>` : ""}
       <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:16px;">${fechaTexto}</p>
       <div style="display:flex; gap:8px; justify-content:center;">
         <button class="btn btn-secondary" id="cancelar-reclamo">Cancelar</button>
