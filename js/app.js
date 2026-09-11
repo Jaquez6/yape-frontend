@@ -422,26 +422,22 @@ async function actualizarPendientes() {
   if (!estado) return;
   const cont = document.getElementById("pendientes-anteriores-cont");
 
+  // Admin ya tiene fecha + "Solo sin reclamar" en su propio feed para
+  // encontrar pendientes de cualquier rango -- no necesita esta sección
+  // aparte, que además competía visualmente con esos mismos filtros.
+  if (estado.esAdmin) {
+    cont.style.display = "none";
+    cont.innerHTML = "";
+    return;
+  }
+
   // Sede: solo se consulta si hay un término de búsqueda válido en curso.
   // Sin búsqueda no se muestra nada -- nunca un contador esperando a vaciarse.
-  if (!estado.esAdmin) {
-    const t = estado.q.trim();
-    if (!t || !terminoValido(t)) {
-      cont.style.display = "none";
-      cont.innerHTML = "";
-      return;
-    }
-  } else {
-    // Admin: la sección solo se muestra mientras está en la vista de HOY
-    // (sin tocar sus filtros de fecha). Si movió el rango a otro lado,
-    // su propio feed + "solo sin reclamar" ya cubre esa auditoría, y
-    // mostrar la sección aparte duplicaría resultados.
-    const viendoHoy = estado.fechaDesde === hoyEnLima() && estado.fechaHasta === hoyEnLima();
-    if (!viendoHoy) {
-      cont.style.display = "none";
-      cont.innerHTML = "";
-      return;
-    }
+  const t = estado.q.trim();
+  if (!t || !terminoValido(t)) {
+    cont.style.display = "none";
+    cont.innerHTML = "";
+    return;
   }
 
   try {
