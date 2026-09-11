@@ -10,6 +10,7 @@ document.getElementById("sound-btn").addEventListener("click", () => {
 });
 
 export async function renderDashboardView() {
+  document.getElementById("btn-cambiar-canal").style.display = "none";
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
 
@@ -119,8 +120,9 @@ export async function renderFeedView(device) {
 
   estadoFeed = crearEstadoInicial(device, esAdmin);
 
+  document.getElementById("btn-cambiar-canal").style.display = esAdmin ? "inline-flex" : "none";
+
   app.innerHTML = `
-    ${esAdmin ? `<div class="nav-bar"><a href="index.html" class="btn btn-secondary">⬅️ Cambiar canal</a></div>` : ""}
     ${renderBarraFiltros(esAdmin)}
     <div id="pendientes-anteriores-cont" style="display:none; margin-bottom:14px;"></div>
     <p id="contador-resultados" role="status" aria-live="polite"
