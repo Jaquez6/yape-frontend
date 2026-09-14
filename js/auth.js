@@ -1,10 +1,7 @@
-import { API_BASE } from "./api.js";
+import { API_BASE, cerrarSesion } from "./api.js";
 import { renderDashboardView, renderFeedView } from "./app.js";
 
-document.getElementById("logout-btn").addEventListener("click", () => {
-  localStorage.removeItem("yape_token");
-  location.reload();
-});
+document.getElementById("logout-btn").addEventListener("click", cerrarSesion);
 
 document.getElementById("lock-btn").addEventListener("click", intentarEntrar);
 document.getElementById("lock-input").addEventListener("keypress", (e) => {
@@ -13,6 +10,28 @@ document.getElementById("lock-input").addEventListener("keypress", (e) => {
 document.getElementById("lock-sede-id").addEventListener("keypress", (e) => {
   if (e.key === "Enter") intentarEntrar();
 });
+
+function decodificarExpiracionJWT(token) {
+  try {
+    const payload = token.split(".")[1];
+    const json = JSON.parse(atob(payload));
+    return json.exp * 1000; // exp viene en segundos, Date.now() usa milisegundos
+  } catch (err) {
+    return null;
+  }
+}
+
+function programarCierrePorExpiracion(token) {
+  const expMs = decodificarExpiracionJWT(token);
+  if (!expMs) return;
+
+  const msRestantes = expMs - Date.now();
+  if (msRestantes <= 0) {
+    cerrarSesion();
+    return;
+  }
+  setTimeout(cerrarSesion, msRestantes);
+}
 
 async function intentarEntrar() {
   const sedeId = document.getElementById("lock-sede-id").value.trim();
@@ -41,6 +60,7 @@ async function intentarEntrar() {
     localStorage.setItem("yape_tipo", data.tipo);
     localStorage.setItem("yape_device", data.device || "");
     localStorage.setItem("yape_sede_id", sedeId);
+    programarCierrePorExpiracion(data.token);
     document.getElementById("lock-screen").style.display = "none";
     iniciarApp();
   } catch (err) {
@@ -73,6 +93,7 @@ function iniciarApp() {
 
 const tokenGuardado = localStorage.getItem("yape_token");
 if (tokenGuardado) {
+  programarCierrePorExpiracion(tokenGuardado);
   document.getElementById("lock-screen").style.display = "none";
   iniciarApp();
 }
