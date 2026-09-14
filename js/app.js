@@ -10,7 +10,7 @@ document.getElementById("sound-btn").addEventListener("click", () => {
 });
 
 export async function renderDashboardView() {
-  // document.getElementById("btn-cambiar-canal").style.display = "none";
+  document.getElementById("btn-cambiar-canal").style.display = "none";
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
 
@@ -120,8 +120,7 @@ export async function renderFeedView(device) {
 
   estadoFeed = crearEstadoInicial(device, esAdmin);
 
-  // Cambiar canal deshabilitado para el piloto QF (ver index.html)
-  // document.getElementById("btn-cambiar-canal").style.display = esAdmin ? "inline-flex" : "none";
+  document.getElementById("btn-cambiar-canal").style.display = esAdmin ? "inline-flex" : "none";
 
   app.innerHTML = `
     ${renderBarraFiltros(esAdmin)}
