@@ -15,6 +15,8 @@ export async function renderDashboardView() {
   document.getElementById("live-indicator").style.display = "none";
 
   const app = document.getElementById("app");
+  app.style.maxWidth = "";
+  app.style.width = "";
   app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando lista de dispositivos...</p>`;
 
   try {
@@ -48,7 +50,7 @@ export async function renderDashboardView() {
     html += `
       <div class="device-card" onclick="window.irAConciliacion()">
         <div>
-          <strong style="font-size:0.9rem; color:var(--text-primary);">📊 Conciliación diaria</strong>
+          <strong style="font-size:0.9rem; color:var(--text-primary);">Conciliación diaria</strong>
           <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Subir reporte de Yape y comparar contra lo capturado</p>
         </div>
         <span class="btn btn-secondary">Abrir</span>
@@ -111,6 +113,8 @@ export async function renderConciliacionView() {
   document.getElementById("view-title").innerText = "Conciliación diaria";
 
   const app = document.getElementById("app");
+  app.style.maxWidth = "none";
+  app.style.width = "100%";
   app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando cuentas...</p>`;
 
   let devices = [];
@@ -307,7 +311,7 @@ function pintarTablaConciliacion(filas) {
   cont.innerHTML = `
     <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:6px;">${filas.length} fila(s)</p>
     <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; font-size:0.8rem; color:var(--text-primary);">
+      <table style="width:100%; min-width:760px; border-collapse:collapse; font-size:0.8rem; color:var(--text-primary);">
         <thead>
           <tr>
             <th style="${th}">Estado</th>
@@ -385,6 +389,8 @@ function filtroActivo(estado) {
 
 export async function renderFeedView(device) {
   const app = document.getElementById("app");
+  app.style.maxWidth = "";
+  app.style.width = "";
   const esAdmin = localStorage.getItem("yape_tipo") === "admin";
   const sedeLogueada = localStorage.getItem("yape_sede_id");
 
