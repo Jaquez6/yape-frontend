@@ -10,7 +10,7 @@ document.getElementById("sound-btn").addEventListener("click", () => {
 });
 
 export async function renderDashboardView() {
-  document.getElementById("btn-cambiar-canal").style.display = "none";
+  document.getElementById("view-title").innerText = "Yape Monitor";
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
 
@@ -106,7 +106,10 @@ const CONC_ETIQUETAS = {
 };
 
 export async function renderConciliacionView() {
-  document.getElementById("btn-cambiar-canal").style.display = "none";
+  const btnVolverHeader = document.getElementById("btn-cambiar-canal");
+  btnVolverHeader.style.display = "inline-flex";
+  btnVolverHeader.removeAttribute("href");
+  btnVolverHeader.onclick = (e) => { e.preventDefault(); renderDashboardView(); };
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
   document.getElementById("view-title").innerText = "Conciliación diaria";
@@ -128,8 +131,6 @@ export async function renderConciliacionView() {
   const opcionesDevice = devices.map(d => `<option value="${d}">${d}</option>`).join("");
 
   app.innerHTML = `
-    <button class="btn btn-secondary" id="conc-volver" style="margin-bottom:14px;">⬅️ Volver</button>
-
     <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
       <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px;">
         Cuenta
@@ -151,7 +152,6 @@ export async function renderConciliacionView() {
     <div id="conc-tabla"></div>
   `;
 
-  document.getElementById("conc-volver").addEventListener("click", renderDashboardView);
   document.getElementById("conc-device").addEventListener("change", cargarCapturasConciliacion);
   document.getElementById("conc-fecha").addEventListener("change", cargarCapturasConciliacion);
   document.getElementById("conc-btn-enviar").addEventListener("click", conciliarSubmit);
@@ -396,7 +396,10 @@ export async function renderFeedView(device) {
   document.getElementById("live-indicator").style.display = "flex";
 
   estadoFeed = crearEstadoInicial(device, esAdmin);
-
+  
+  const btnCanal = document.getElementById("btn-cambiar-canal");
+  btnCanal.onclick = null;
+  btnCanal.setAttribute("href", "index.html");
   document.getElementById("btn-cambiar-canal").style.display = esAdmin ? "inline-flex" : "none";
 
   app.innerHTML = `
