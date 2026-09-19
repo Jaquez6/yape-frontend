@@ -63,33 +63,46 @@ export async function renderDashboardView() {
 
 // ============================================================
 // Vista de conciliación diaria (solo admin).
-// Sube el reporte de Yape del día y lo compara contra lo capturado.
+// 1. Elige cuenta y fecha -> se cargan las capturas de ese día.
+// 2. Sube el reporte de Yape y concilia -> la misma tabla se pinta
+//    con verde / amarillo / rojo y aparece el resumen.
 // ============================================================
 
 function ayerEnLima() {
-  const ahora = new Date();
-  const ayer = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
+  const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
   return ayer.toLocaleDateString("en-CA", { timeZone: "America/Lima" });
 }
 
 function formatoDiferencia(segundos) {
-  if (segundos === null || segundos === undefined) return "—";
+  if (segundos === null || segundos === undefined) return "";
   const signo = segundos < 0 ? "-" : "";
   const abs = Math.abs(Math.round(segundos));
   if (abs < 60) return `${signo}${abs}s`;
-  const min = Math.floor(abs / 60);
-  const seg = abs % 60;
-  return `${signo}${min}m ${seg}s`;
+  return `${signo}${Math.floor(abs / 60)}m ${abs % 60}s`;
 }
 
-function formatoFechaLima(iso) {
-  if (!iso) return "—";
+function formatoHoraLima(iso) {
+  if (!iso) return "";
   return new Date(iso).toLocaleString("es-PE", {
     timeZone: "America/Lima",
-    day: "numeric", month: "numeric",
-    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true
+    day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
   });
 }
+
+const CONC_COLORES = {
+  sin_conciliar: "var(--text-secondary)",
+  verde: "#10b981",
+  amarillo: "#eab308",
+  rojo: "#f87171",
+};
+
+const CONC_ETIQUETAS = {
+  sin_conciliar: "Sin conciliar",
+  verde: "Conciliado",
+  amarillo: "No capturado",
+  rojo: "Sin respaldo",
+};
 
 export async function renderConciliacionView() {
   document.getElementById("btn-cambiar-canal").style.display = "none";
@@ -98,7 +111,7 @@ export async function renderConciliacionView() {
   document.getElementById("view-title").innerText = "Conciliación diaria";
 
   const app = document.getElementById("app");
-  app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando dispositivos...</p>`;
+  app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando cuentas...</p>`;
 
   let devices = [];
   try {
@@ -115,33 +128,78 @@ export async function renderConciliacionView() {
   app.innerHTML = `
     <button class="btn btn-secondary" id="conc-volver" style="margin-bottom:14px;">⬅️ Volver</button>
 
-    <div style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
-      <label style="font-size:0.8rem; color:var(--text-secondary);">
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+      <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px;">
         Cuenta
-        <select id="conc-device" style="width:100%; margin-top:4px; background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--text-primary); padding:8px; border-radius:6px;">
-          ${opcionesDevice}
-        </select>
+        <select id="conc-device" style="${estiloInputChico()}">${opcionesDevice}</select>
       </label>
-
-      <label style="font-size:0.8rem; color:var(--text-secondary);">
-        Fecha a conciliar
-        <input id="conc-fecha" type="date" value="${ayerEnLima()}" style="width:100%; margin-top:4px; background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--text-primary); padding:8px; border-radius:6px;" />
+      <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px;">
+        Fecha
+        <input id="conc-fecha" type="date" value="${ayerEnLima()}" style="${estiloInputChico()}" />
       </label>
-
-      <label style="font-size:0.8rem; color:var(--text-secondary);">
+      <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px;">
         Reporte de Yape (.xlsx)
-        <input id="conc-archivo" type="file" accept=".xlsx" style="width:100%; margin-top:4px; color:var(--text-primary);" />
+        <input id="conc-archivo" type="file" accept=".xlsx" style="font-size:0.78rem; color:var(--text-primary);" />
       </label>
-
-      <button class="btn" id="conc-btn-enviar" style="margin-top:6px;">Conciliar</button>
-      <p id="conc-error" style="color:#f87171; font-size:0.8rem; display:none;"></p>
+      <button class="btn" id="conc-btn-enviar">Conciliar</button>
     </div>
 
-    <div id="conc-resultado" style="margin-top:24px;"></div>
+    <p id="conc-error" style="color:#f87171; font-size:0.8rem; display:none; margin-bottom:10px;"></p>
+    <div id="conc-resumen" style="margin-bottom:12px;"></div>
+    <div id="conc-tabla"></div>
   `;
 
   document.getElementById("conc-volver").addEventListener("click", renderDashboardView);
+  document.getElementById("conc-device").addEventListener("change", cargarCapturasConciliacion);
+  document.getElementById("conc-fecha").addEventListener("change", cargarCapturasConciliacion);
   document.getElementById("conc-btn-enviar").addEventListener("click", conciliarSubmit);
+
+  await cargarCapturasConciliacion();
+}
+
+async function cargarCapturasConciliacion() {
+  const device = document.getElementById("conc-device").value;
+  const fecha = document.getElementById("conc-fecha").value;
+  const tabla = document.getElementById("conc-tabla");
+  const errorMsg = document.getElementById("conc-error");
+
+  errorMsg.style.display = "none";
+  document.getElementById("conc-resumen").innerHTML = "";
+  if (!device || !fecha) {
+    tabla.innerHTML = "";
+    return;
+  }
+
+  tabla.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando capturas...</p>`;
+
+  try {
+    const params = new URLSearchParams({ device_id: device, fecha });
+    const res = await apiFetch(`/conciliacion/capturas?${params.toString()}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Error ${res.status}`);
+    }
+    const data = await res.json();
+
+    // Mismo formato de fila que devuelve el motor, en estado "sin_conciliar"
+    const filas = data.capturas.map(c => ({
+      estado: "sin_conciliar",
+      captura_id: c.id,
+      origen_reporte: null,
+      monto_centavos: c.monto_centavos,
+      fecha_operacion: null,
+      remitente_capturado: c.remitente,
+      timestamp_captura: c.timestamp_lima,
+      diferencia_yape_app_seg: null,
+      diferencia_yape_backend_seg: null,
+    }));
+
+    pintarTablaConciliacion(filas);
+  } catch (err) {
+    tabla.innerHTML = "";
+    errorMsg.innerText = err.message || "Error al cargar las capturas.";
+    errorMsg.style.display = "block";
+  }
 }
 
 async function conciliarSubmit() {
@@ -150,7 +208,6 @@ async function conciliarSubmit() {
   const archivo = document.getElementById("conc-archivo").files[0];
   const btn = document.getElementById("conc-btn-enviar");
   const errorMsg = document.getElementById("conc-error");
-  const resultadoDiv = document.getElementById("conc-resultado");
 
   errorMsg.style.display = "none";
 
@@ -162,7 +219,6 @@ async function conciliarSubmit() {
 
   btn.disabled = true;
   btn.innerText = "Conciliando...";
-  resultadoDiv.innerHTML = "";
 
   const formData = new FormData();
   formData.append("device_id", device);
@@ -170,17 +226,15 @@ async function conciliarSubmit() {
   formData.append("archivo", archivo);
 
   try {
-    // Ojo: no pasar "Content-Type" en headers -- el navegador arma el
-    // boundary de multipart automáticamente al mandar FormData.
+    // No poner "Content-Type": el navegador arma el boundary de multipart.
     const res = await apiFetch("/conciliacion", { method: "POST", body: formData });
-
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || `Error ${res.status}`);
     }
-
     const data = await res.json();
-    pintarResultadoConciliacion(data);
+    pintarResumenConciliacion(data);
+    pintarTablaConciliacion(data.filas);
   } catch (err) {
     errorMsg.innerText = err.message || "Error al conciliar.";
     errorMsg.style.display = "block";
@@ -190,76 +244,86 @@ async function conciliarSubmit() {
   }
 }
 
-function pintarResultadoConciliacion(data) {
-  const cont = document.getElementById("conc-resultado");
+function pintarResumenConciliacion(data) {
   const r = data.resumen;
+  const app = r.diferencia_yape_app;
+  const back = r.diferencia_yape_backend;
 
-  const colorEstado = {
-    verde: "var(--status-green, #10b981)",
-    amarillo: "#eab308",
-    rojo: "#f87171"
-  };
-
-  const etiquetaEstado = {
-    verde: "Conciliado",
-    amarillo: "En reporte, no capturado",
-    rojo: "Capturado, sin respaldo"
-  };
-
-  let html = `
-    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:18px; font-size:0.85rem;">
-      <div><strong>Cobertura:</strong> ${r.cobertura}%</div>
-      <div><strong>Confiabilidad:</strong> ${r.confiabilidad}%</div>
-      <div style="color:${colorEstado.verde};">🟢 ${r.totales.verde}</div>
-      <div style="color:${colorEstado.amarillo};">🟡 ${r.totales.amarillo}</div>
-      <div style="color:${colorEstado.rojo};">🔴 ${r.totales.rojo}</div>
-    </div>
-
-    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:18px; font-size:0.78rem; color:var(--text-secondary);">
-      <div>Δ Yape→app: mediana ${formatoDiferencia(r.diferencia_yape_app.mediana)},
-           p95 ${formatoDiferencia(r.diferencia_yape_app.p95)},
-           máx ${formatoDiferencia(r.diferencia_yape_app.maximo)} (n=${r.diferencia_yape_app.n})</div>
-      <div>Δ Yape→backend: mediana ${formatoDiferencia(r.diferencia_yape_backend.mediana)},
-           p95 ${formatoDiferencia(r.diferencia_yape_backend.p95)},
-           máx ${formatoDiferencia(r.diferencia_yape_backend.maximo)} (n=${r.diferencia_yape_backend.n})</div>
-    </div>
-  `;
-
+  let avisos = "";
+  if (r.filas_reporte_otro_dia > 0) {
+    avisos += `<p style="color:#eab308; font-size:0.78rem; margin-top:6px;">
+      ${r.filas_reporte_otro_dia} fila(s) del reporte eran de otro día y se descartaron.</p>`;
+  }
   if (data.errores_lectura && data.errores_lectura.length > 0) {
-    html += `<p style="color:#eab308; font-size:0.78rem; margin-bottom:10px;">
-      ${data.errores_lectura.length} fila(s) del reporte con error de lectura (ver consola).
-    </p>`;
+    avisos += `<p style="color:#eab308; font-size:0.78rem; margin-top:6px;">
+      ${data.errores_lectura.length} fila(s) del reporte no se pudieron leer (detalle en consola).</p>`;
     console.warn("Errores al leer el reporte:", data.errores_lectura);
   }
 
-  html += `<div class="yape-list">`;
+  document.getElementById("conc-resumen").innerHTML = `
+    <div style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.85rem;">
+      <div><strong>Cobertura:</strong> ${r.cobertura}%</div>
+      <div><strong>Confiabilidad:</strong> ${r.confiabilidad}%</div>
+      <div style="color:${CONC_COLORES.verde};">Conciliados: ${r.totales.verde}</div>
+      <div style="color:${CONC_COLORES.amarillo};">No capturados: ${r.totales.amarillo}</div>
+      <div style="color:${CONC_COLORES.rojo};">Sin respaldo: ${r.totales.rojo}</div>
+    </div>
+    <div style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.75rem; color:var(--text-secondary); margin-top:6px;">
+      <div>Δ Yape→app: mediana ${formatoDiferencia(app.mediana) || "—"} · p95 ${formatoDiferencia(app.p95) || "—"} · máx ${formatoDiferencia(app.maximo) || "—"} (n=${app.n})</div>
+      <div>Δ Yape→backend: mediana ${formatoDiferencia(back.mediana) || "—"} · p95 ${formatoDiferencia(back.p95) || "—"} · máx ${formatoDiferencia(back.maximo) || "—"} (n=${back.n})</div>
+    </div>
+    ${avisos}
+  `;
+}
 
-  data.filas.forEach(f => {
-    const color = colorEstado[f.estado];
-    const monto = f.monto_centavos != null ? (f.monto_centavos / 100).toFixed(2) : "—";
-    const nombre = f.origen_reporte || f.remitente_capturado || "—";
-    const fechaMostrar = formatoFechaLima(f.fecha_operacion || f.timestamp_captura);
+function pintarTablaConciliacion(filas) {
+  const cont = document.getElementById("conc-tabla");
 
-    html += `
-      <div class="yape-card" style="border-left: 3px solid ${color};">
-        <div class="yape-row-main">
-          <span class="remitente">${nombre}</span>
-          <span class="monto">S/ ${monto}</span>
-        </div>
-        <div class="yape-row-sub">
-          <div style="display:flex; gap:6px; align-items:center;">
-            <span class="meta-tag" style="color:${color}; border-color:${color};">${etiquetaEstado[f.estado]}</span>
-            ${f.estado === "verde" ? `<span class="meta-tag">Δapp ${formatoDiferencia(f.diferencia_yape_app_seg)}</span>
-              <span class="meta-tag">Δbackend ${formatoDiferencia(f.diferencia_yape_backend_seg)}</span>` : ""}
-          </div>
-          <span>${fechaMostrar}</span>
-        </div>
-      </div>
+  if (filas.length === 0) {
+    cont.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">No hay capturas para esta cuenta y fecha.</p>`;
+    return;
+  }
+
+  const th = "text-align:left; padding:6px 8px; border-bottom:1px solid var(--panel-border); color:var(--text-secondary); font-weight:600; white-space:nowrap;";
+  const td = "padding:5px 8px; border-bottom:1px solid var(--panel-border); white-space:nowrap;";
+
+  const cuerpo = filas.map(f => {
+    const color = CONC_COLORES[f.estado];
+    const monto = (f.monto_centavos / 100).toFixed(2);
+    return `
+      <tr style="border-left:3px solid ${color};">
+        <td style="${td} color:${color}; font-weight:600;">${CONC_ETIQUETAS[f.estado]}</td>
+        <td style="${td}">${formatoHoraLima(f.fecha_operacion)}</td>
+        <td style="${td}">${f.origen_reporte || ""}</td>
+        <td style="${td}">${f.remitente_capturado || ""}</td>
+        <td style="${td} text-align:right;">S/ ${monto}</td>
+        <td style="${td}">${formatoHoraLima(f.timestamp_captura)}</td>
+        <td style="${td} text-align:right;">${formatoDiferencia(f.diferencia_yape_app_seg)}</td>
+        <td style="${td} text-align:right;">${formatoDiferencia(f.diferencia_yape_backend_seg)}</td>
+      </tr>
     `;
-  });
+  }).join("");
 
-  html += `</div>`;
-  cont.innerHTML = html;
+  cont.innerHTML = `
+    <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:6px;">${filas.length} fila(s)</p>
+    <div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.8rem; color:var(--text-primary);">
+        <thead>
+          <tr>
+            <th style="${th}">Estado</th>
+            <th style="${th}">Hora reporte</th>
+            <th style="${th}">Origen (reporte)</th>
+            <th style="${th}">Remitente (captura)</th>
+            <th style="${th} text-align:right;">Monto</th>
+            <th style="${th}">Hora captura</th>
+            <th style="${th} text-align:right;">Δ app</th>
+            <th style="${th} text-align:right;">Δ backend</th>
+          </tr>
+        </thead>
+        <tbody>${cuerpo}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ============================================================
@@ -987,4 +1051,3 @@ window.toggleAsignacion = toggleAsignacion;
 window.cancelarAsignacion = cancelarAsignacion;
 window.confirmarAsignacion = confirmarAsignacion;
 window.irAConciliacion = renderConciliacionView;
-window.conciliarSubmit = conciliarSubmit;
