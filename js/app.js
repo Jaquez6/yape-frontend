@@ -98,6 +98,8 @@ const CONC_COLORES = {
   rojo: "#f87171",
 };
 
+let ultimaConciliacion = null;
+
 const CONC_ETIQUETAS = {
   sin_conciliar: "Sin conciliar",
   verde: "Conciliado",
@@ -167,6 +169,7 @@ async function cargarCapturasConciliacion() {
 
   errorMsg.style.display = "none";
   document.getElementById("conc-resumen").innerHTML = "";
+  ultimaConciliacion = null;
   if (!device || !fecha) {
     tabla.innerHTML = "";
     return;
@@ -235,6 +238,7 @@ async function conciliarSubmit() {
       throw new Error(errData.detail || `Error ${res.status}`);
     }
     const data = await res.json();
+    ultimaConciliacion = { device, fecha, data };
     pintarResumenConciliacion(data);
     pintarTablaConciliacion(data.filas);
   } catch (err) {
@@ -275,7 +279,9 @@ function pintarResumenConciliacion(data) {
       <div>Δ Yape→backend: mediana ${formatoDiferencia(back.mediana) || "—"} · p95 ${formatoDiferencia(back.p95) || "—"} · máx ${formatoDiferencia(back.maximo) || "—"} (n=${back.n})</div>
     </div>
     ${avisos}
+    <button class="btn btn-secondary" id="conc-btn-export" style="margin-top:10px;">Exportar Excel</button>
   `;
+  document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 }
 
 function pintarTablaConciliacion(filas) {
@@ -326,6 +332,53 @@ function pintarTablaConciliacion(filas) {
       </table>
     </div>
   `;
+}
+
+async function exportarConciliacionExcel() {
+  if (!ultimaConciliacion) return;
+  const { device, fecha, data } = ultimaConciliacion;
+  const btn = document.getElementById("conc-btn-export");
+
+  // Se mandan las filas ya formateadas como se ven en la grilla, así el
+  // Excel sale idéntico y no hay que volver a subir el reporte.
+  const filas = data.filas.map(f => ({
+    estado: f.estado,
+    hora_reporte: formatoHoraLima(f.fecha_operacion),
+    origen_reporte: f.origen_reporte,
+    remitente_capturado: f.remitente_capturado,
+    monto_centavos: f.monto_centavos,
+    hora_captura: formatoHoraLima(f.timestamp_captura),
+    delta_app: formatoDiferencia(f.diferencia_yape_app_seg),
+    delta_backend: formatoDiferencia(f.diferencia_yape_backend_seg),
+  }));
+
+  btn.disabled = true;
+  btn.innerText = "Exportando...";
+
+  try {
+    const res = await apiFetch("/conciliacion/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: device, fecha, filas, resumen: data.resumen }),
+    });
+    if (!res.ok) throw new Error("Error al exportar");
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${device} - ${fecha}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("No se pudo exportar. Intenta de nuevo.");
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Exportar Excel";
+  }
 }
 
 // ============================================================
