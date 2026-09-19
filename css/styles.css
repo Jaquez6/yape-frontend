@@ -116,3 +116,4 @@ flex-shrink: 0;
 }
 
 body.vista-ancha { max-width: 1400px; }
+body.vista-ancha header { max-width: 680px; margin-left: auto; margin-right: auto; }
