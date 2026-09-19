@@ -131,7 +131,7 @@ export async function renderConciliacionView() {
   const opcionesDevice = devices.map(d => `<option value="${d}">${d}</option>`).join("");
 
   app.innerHTML = `
-    <div id="conc-controles" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
       <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px;">
         Cuenta
         <select id="conc-device" style="${estiloInputChico()}">${opcionesDevice}</select>
