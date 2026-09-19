@@ -15,8 +15,7 @@ export async function renderDashboardView() {
   document.getElementById("live-indicator").style.display = "none";
 
   const app = document.getElementById("app");
-  app.style.maxWidth = "";
-  app.style.width = "";
+  document.body.classList.remove("vista-ancha");
   app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando lista de dispositivos...</p>`;
 
   try {
@@ -113,8 +112,7 @@ export async function renderConciliacionView() {
   document.getElementById("view-title").innerText = "Conciliación diaria";
 
   const app = document.getElementById("app");
-  app.style.maxWidth = "none";
-  app.style.width = "100%";
+  document.body.classList.add("vista-ancha");
   app.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Cargando cuentas...</p>`;
 
   let devices = [];
@@ -389,8 +387,7 @@ function filtroActivo(estado) {
 
 export async function renderFeedView(device) {
   const app = document.getElementById("app");
-  app.style.maxWidth = "";
-  app.style.width = "";
+  document.body.classList.remove("vista-ancha");
   const esAdmin = localStorage.getItem("yape_tipo") === "admin";
   const sedeLogueada = localStorage.getItem("yape_sede_id");
 

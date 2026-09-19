@@ -114,3 +114,5 @@ flex-shrink: 0;
         justify-content: center;
     }
 }
+
+body.vista-ancha { max-width: 1400px; }
