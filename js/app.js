@@ -14,6 +14,7 @@ export async function renderDashboardView() {
   document.getElementById("view-title").innerText = "Yape Monitor";
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
+  document.getElementById("sound-btn").style.display = "none";
 
   const app = document.getElementById("app");
   document.body.classList.remove("vista-ancha");
@@ -123,6 +124,7 @@ export async function renderConciliacionView() {
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
   document.getElementById("view-title").innerText = "Conciliación diaria";
+  document.getElementById("sound-btn").style.display = "none";
 
   const app = document.getElementById("app");
   document.body.classList.add("vista-ancha");
@@ -455,6 +457,7 @@ export async function renderFeedView(device) {
   document.getElementById("view-title").innerText = (device === "" ? "Feed Global" : device) + " — " + sedeLogueada;
   document.getElementById("total-day-card").style.display = "flex";
   document.getElementById("live-indicator").style.display = "flex";
+  document.getElementById("sound-btn").style.display = esAdmin ? "inline-flex" : "none";
 
   estadoFeed = crearEstadoInicial(device, esAdmin);
   

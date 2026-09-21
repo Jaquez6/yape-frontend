@@ -37,6 +37,7 @@ export async function renderStatusView() {
   btnVolver.setAttribute("href", "index.html");
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
+  document.getElementById("sound-btn").style.display = "none";
   document.getElementById("view-title").innerText = "Estado de equipos";
   document.body.classList.add("vista-ancha");
 

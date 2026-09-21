@@ -76,8 +76,6 @@ function iniciarApp() {
   const tipo = localStorage.getItem("yape_tipo");
   const deviceAsignado = localStorage.getItem("yape_device");
 
-  document.getElementById("sound-btn").style.display = tipo === "admin" ? "inline-flex" : "none";
-
   if (tipo === "admin") {
     const urlParams = new URLSearchParams(window.location.search);
     const selectedDevice = urlParams.get("device");
