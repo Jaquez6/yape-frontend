@@ -15,6 +15,7 @@ export async function renderDashboardView() {
   document.getElementById("total-day-card").style.display = "none";
   document.getElementById("live-indicator").style.display = "none";
   document.getElementById("sound-btn").style.display = "none";
+  document.getElementById("btn-cambiar-canal").style.display = "none";
 
   const app = document.getElementById("app");
   document.body.classList.remove("vista-ancha");
