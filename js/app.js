@@ -1,4 +1,5 @@
 import { apiFetch } from "./api.js";
+import { renderStatusView } from "./status.js";
 
 let soundEnabled = false;
 const audio = new Audio("yape.mp3");
@@ -51,6 +52,13 @@ export async function renderDashboardView() {
         <div>
           <strong style="font-size:0.9rem; color:var(--text-primary);">Conciliación diaria</strong>
           <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Subir reporte de Yape y comparar contra lo capturado</p>
+        </div>
+        <span class="btn btn-secondary">Abrir</span>
+      </div>
+      <div class="device-card" onclick="window.irAStatus()">
+        <div>
+          <strong style="font-size:0.9rem; color:var(--text-primary);">Estado de equipos</strong>
+          <p style="font-size:0.75rem; color: var(--text-secondary); margin-top:2px;">Conexión, listener y batería de cada celular</p>
         </div>
         <span class="btn btn-secondary">Abrir</span>
       </div>
@@ -273,13 +281,13 @@ function pintarResumenConciliacion(data) {
       <div style="color:${CONC_COLORES.verde};">Conciliados: ${r.totales.verde}</div>
       <div style="color:${CONC_COLORES.amarillo};">No capturados: ${r.totales.amarillo}</div>
       <div style="color:${CONC_COLORES.rojo};">Sin respaldo: ${r.totales.rojo}</div>
+      <button class="btn btn-secondary" id="conc-btn-export" style="margin-left:auto;">Exportar Excel</button>
     </div>
     <div style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.75rem; color:var(--text-secondary); margin-top:6px;">
       <div>Δ Yape→app: mediana ${formatoDiferencia(app.mediana) || "—"} · p95 ${formatoDiferencia(app.p95) || "—"} · máx ${formatoDiferencia(app.maximo) || "—"} (n=${app.n})</div>
       <div>Δ Yape→backend: mediana ${formatoDiferencia(back.mediana) || "—"} · p95 ${formatoDiferencia(back.p95) || "—"} · máx ${formatoDiferencia(back.maximo) || "—"} (n=${back.n})</div>
     </div>
     ${avisos}
-    <button class="btn btn-secondary" id="conc-btn-export" style="margin-top:10px;">Exportar Excel</button>
   `;
   document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 }
@@ -511,7 +519,7 @@ function renderBarraFiltros(esAdmin) {
           Solo sin reclamar
         </label>
 
-        ${esAdmin ? `<button id="btn-exportar" class="btn btn-secondary" style="font-size:0.75rem; padding:5px 10px;">Exportar CSV</button>` : ""}
+        ${esAdmin ? `<button id="btn-exportar" class="btn btn-secondary" style="font-size:0.75rem; padding:5px 10px;">Exportar Excel</button>` : ""}
       </div>
     </div>
   `;
@@ -562,7 +570,7 @@ function conectarControlesFiltro(esAdmin) {
       ejecutarBusqueda(true);
     });
     
-    document.getElementById("btn-exportar").addEventListener("click", exportarCSV);
+    document.getElementById("btn-exportar").addEventListener("click", exportarExcel);
   }
 
   document.getElementById("check-solo-sin-reclamar").addEventListener("change", (e) => {
@@ -837,7 +845,7 @@ function incrementarResumenDia(monto) {
 // Export CSV (solo admin)
 // ============================================================
 
-async function exportarCSV() {
+async function exportarExcel() {
   const estado = estadoFeed;
   const params = new URLSearchParams();
   const t = estado.q.trim();
@@ -864,8 +872,12 @@ async function exportarCSV() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "yapes_export.csv";
+    a.href = url;    
+    // El backend ya manda el nombre en Content-Disposition; esto es solo
+    // el respaldo por si el navegador no lo toma.
+    const ahora = new Date().toLocaleString("sv-SE", { timeZone: "America/Lima" });
+    const sello = ahora.slice(0, 16).replace("T", " ").replace(/[:-]/g, "-");
+    a.download = `YAPEOS ${sello}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -875,7 +887,7 @@ async function exportarCSV() {
     console.error(err);
   } finally {
     btn.disabled = false;
-    btn.innerText = "Exportar CSV";
+    btn.innerText = "Exportar Excel";
   }
 }
 
@@ -1110,3 +1122,4 @@ window.toggleAsignacion = toggleAsignacion;
 window.cancelarAsignacion = cancelarAsignacion;
 window.confirmarAsignacion = confirmarAsignacion;
 window.irAConciliacion = renderConciliacionView;
+window.irAStatus = renderStatusView;
