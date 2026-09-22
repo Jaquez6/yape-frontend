@@ -144,6 +144,7 @@ function tarjetaEquipo(e) {
       ${fila("Último contacto", `<span title="${formatoHoraLima(e.ultimo_contacto)}">${haceCuanto(e.ultimo_contacto)}</span>`)}
       ${fila("Listener", `<span style="${atenuado}">${textoListener(e.listener_activo)}</span>${sufijoViejo}`)}
       ${fila("Batería", `<span style="${atenuado}">${textoBateria(e)}</span>${sufijoViejo}`)}
+      ${filasEquipo(e.equipo)}
       ${fila("Último yapeo", e.ultimo_yapeo
         ? `<span title="${formatoHoraLima(e.ultimo_yapeo)}">${haceCuanto(e.ultimo_yapeo)}</span>`
         : `<span style="color:var(--text-secondary);">Sin yapeos desde el reinicio</span>`)}
@@ -172,6 +173,13 @@ function textoBateria(e) {
   const icono = e.bateria <= 20 && !e.enchufado ? "🪫" : "🔋";
   const carga = e.enchufado ? " · enchufado" : e.enchufado === false ? " · desenchufado" : "";
   return `${icono} ${e.bateria}%${carga}`;
+}
+
+function filasEquipo(eq) {
+  const sinDato = `<span style="color:var(--text-secondary);">Sin dato aún</span>`;
+  if (!eq) return fila("App", sinDato) + fila("Equipo", sinDato);
+  return fila("App", `v${eq.app_version} (${eq.app_version_code})`)
+       + fila("Equipo", `${eq.marca} ${eq.modelo} · Android ${eq.android}`);
 }
 
 function bloqueIncidentes(lista) {
