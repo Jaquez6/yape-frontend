@@ -158,6 +158,7 @@ export async function renderConciliacionView() {
         <input id="conc-archivo" type="file" accept=".xlsx" style="font-size:0.78rem; color:var(--text-primary);" />
       </label>
       <button class="btn" id="conc-btn-enviar">Conciliar</button>
+      <button class="btn btn-secondary" id="conc-btn-export" style="margin-left:auto;">Exportar a Excel</button>
     </div>
 
     <p id="conc-error" style="color:#f87171; font-size:0.8rem; display:none; margin-bottom:10px;"></p>
@@ -168,6 +169,7 @@ export async function renderConciliacionView() {
   document.getElementById("conc-device").addEventListener("change", cargarCapturasConciliacion);
   document.getElementById("conc-fecha").addEventListener("change", cargarCapturasConciliacion);
   document.getElementById("conc-btn-enviar").addEventListener("click", conciliarSubmit);
+  document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 
   await cargarCapturasConciliacion();
 }
@@ -328,10 +330,7 @@ function pintarTablaConciliacion(filas) {
   }).join("");
 
   cont.innerHTML = `
-    <div style="display:flex; align-items:center; margin-bottom:6px;">
-      <p style="font-size:0.75rem; color:var(--text-secondary);">${filas.length} fila(s)</p>
-      <button class="btn btn-secondary" id="conc-btn-export" style="margin-left:auto;">Exportar a Excel</button>
-    </div>
+    <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:6px;">${filas.length} fila(s)</p>
     <div style="overflow-x:auto;">
       <table style="width:100%; min-width:760px; border-collapse:collapse; font-size:0.8rem; color:var(--text-primary);">
         <thead>
@@ -351,7 +350,6 @@ function pintarTablaConciliacion(filas) {
       </table>
     </div>
   `;
-  document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 }
 
 async function exportarConciliacionExcel() {
