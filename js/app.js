@@ -208,6 +208,7 @@ async function cargarCapturasConciliacion() {
       timestamp_captura: c.timestamp_lima,
       diferencia_yape_app_seg: null,
       diferencia_yape_backend_seg: null,
+      diferencia_app_backend_seg: (new Date(c.received_at_lima) - new Date(c.timestamp_lima)) / 1000,
     }));
 
     pintarTablaConciliacion(filas);
@@ -265,6 +266,7 @@ function pintarResumenConciliacion(data) {
   const r = data.resumen;
   const app = r.diferencia_yape_app;
   const back = r.diferencia_yape_backend;
+  const cola = r.diferencia_app_backend;
 
   let avisos = "";
   if (r.filas_reporte_otro_dia > 0) {
@@ -289,6 +291,7 @@ function pintarResumenConciliacion(data) {
     <div style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.75rem; color:var(--text-secondary); margin-top:6px;">
       <div>Δ Yape→app: mediana ${formatoDiferencia(app.mediana) || "—"} · p95 ${formatoDiferencia(app.p95) || "—"} · máx ${formatoDiferencia(app.maximo) || "—"} (n=${app.n})</div>
       <div>Δ Yape→backend: mediana ${formatoDiferencia(back.mediana) || "—"} · p95 ${formatoDiferencia(back.p95) || "—"} · máx ${formatoDiferencia(back.maximo) || "—"} (n=${back.n})</div>
+      <div>Δ cola: mediana ${formatoDiferencia(cola.mediana) || "—"} · p95 ${formatoDiferencia(cola.p95) || "—"} · máx ${formatoDiferencia(cola.maximo) || "—"} (n=${cola.n})</div>
     </div>
     ${avisos}
   `;
@@ -319,6 +322,7 @@ function pintarTablaConciliacion(filas) {
         <td style="${td}">${formatoHoraLima(f.timestamp_captura)}</td>
         <td style="${td} text-align:right;">${formatoDiferencia(f.diferencia_yape_app_seg)}</td>
         <td style="${td} text-align:right;">${formatoDiferencia(f.diferencia_yape_backend_seg)}</td>
+        <td style="${td} text-align:right;">${formatoDiferencia(f.diferencia_app_backend_seg)}</td>
       </tr>
     `;
   }).join("");
@@ -337,6 +341,7 @@ function pintarTablaConciliacion(filas) {
             <th style="${th}">Hora captura</th>
             <th style="${th} text-align:right;">Δ app</th>
             <th style="${th} text-align:right;">Δ backend</th>
+            <th style="${th} text-align:right;">Δ cola</th>
           </tr>
         </thead>
         <tbody>${cuerpo}</tbody>
@@ -361,6 +366,7 @@ async function exportarConciliacionExcel() {
     hora_captura: formatoHoraLima(f.timestamp_captura),
     delta_app: formatoDiferencia(f.diferencia_yape_app_seg),
     delta_backend: formatoDiferencia(f.diferencia_yape_backend_seg),
+    delta_cola: formatoDiferencia(f.diferencia_app_backend_seg),
   }));
 
   btn.disabled = true;
