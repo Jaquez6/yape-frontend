@@ -453,6 +453,7 @@ export async function renderFeedView(device) {
   const app = document.getElementById("app");
   document.body.classList.remove("vista-ancha");
   const esAdmin = localStorage.getItem("yape_tipo") === "admin";
+  if (!esAdmin) device = "";
   const sedeLogueada = localStorage.getItem("yape_sede_id");
 
   document.getElementById("view-title").innerText = (device === "" ? "Feed Global" : device) + " — " + sedeLogueada;
