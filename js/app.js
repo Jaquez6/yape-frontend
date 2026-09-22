@@ -211,6 +211,8 @@ async function cargarCapturasConciliacion() {
       diferencia_app_backend_seg: (new Date(c.received_at_lima) - new Date(c.timestamp_lima)) / 1000,
     }));
 
+    // Permite exportar la tabla aunque todavía no se haya conciliado.
+    ultimaConciliacion = { device, fecha, data: { filas, resumen: {} } };
     pintarTablaConciliacion(filas);
   } catch (err) {
     tabla.innerHTML = "";
@@ -286,7 +288,6 @@ function pintarResumenConciliacion(data) {
       <div style="color:${CONC_COLORES.verde};">Conciliados: ${r.totales.verde}</div>
       <div style="color:${CONC_COLORES.amarillo};">No capturados: ${r.totales.amarillo}</div>
       <div style="color:${CONC_COLORES.rojo};">Sin respaldo: ${r.totales.rojo}</div>
-      <button class="btn btn-secondary" id="conc-btn-export" style="margin-left:auto;">Exportar Excel</button>
     </div>
     <div style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.75rem; color:var(--text-secondary); margin-top:6px;">
       <div>Δ Yape→app: mediana ${formatoDiferencia(app.mediana) || "—"} · p95 ${formatoDiferencia(app.p95) || "—"} · máx ${formatoDiferencia(app.maximo) || "—"} (n=${app.n})</div>
@@ -295,7 +296,6 @@ function pintarResumenConciliacion(data) {
     </div>
     ${avisos}
   `;
-  document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 }
 
 function pintarTablaConciliacion(filas) {
@@ -328,7 +328,10 @@ function pintarTablaConciliacion(filas) {
   }).join("");
 
   cont.innerHTML = `
-    <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:6px;">${filas.length} fila(s)</p>
+    <div style="display:flex; align-items:center; margin-bottom:6px;">
+      <p style="font-size:0.75rem; color:var(--text-secondary);">${filas.length} fila(s)</p>
+      <button class="btn btn-secondary" id="conc-btn-export" style="margin-left:auto;">Exportar a Excel</button>
+    </div>
     <div style="overflow-x:auto;">
       <table style="width:100%; min-width:760px; border-collapse:collapse; font-size:0.8rem; color:var(--text-primary);">
         <thead>
@@ -348,6 +351,7 @@ function pintarTablaConciliacion(filas) {
       </table>
     </div>
   `;
+  document.getElementById("conc-btn-export").addEventListener("click", exportarConciliacionExcel);
 }
 
 async function exportarConciliacionExcel() {
